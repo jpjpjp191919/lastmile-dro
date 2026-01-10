@@ -1,0 +1,24 @@
+\begin{table}[htbp]
+\centering
+\caption{Decision Rule Comparison Across Scenarios}
+\label{tab:cvar}
+\begin{tabular}{llcccc}
+\toprule
+Scenario & Metric & SAA & DRO & CVaR$_{0.9}$ & CVaR$_{0.95}$ \\
+\midrule
+A (Urban) & Oracle Match (\%) & 95.4 & 99.5 & 100.0 & 100.0 \\
+ & Cost Gap (\%) & 0.8 & 0.1 & 0.0 & 0.0 \\
+\midrule
+B (Boundary) & Oracle Match (\%) & 56.1 & 88.8 & 100.0 & 100.0 \\
+ & Cost Gap (\%) & 1.0 & 0.3 & 0.0 & 0.0 \\
+\midrule
+C (Rural) & Oracle Match (\%) & 100.0 & 99.9 & 9.3 & 4.8 \\
+ & Cost Gap (\%) & 0.0 & 0.1 & 60.5 & 63.5 \\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}
+\small
+\item Notes: N=20, 1,000 replications. CVaR is designed for tail-risk protection, not 
+oracle agreement; comparison uses expected cost criterion for fairness.
+\end{tablenotes}
+\end{table}

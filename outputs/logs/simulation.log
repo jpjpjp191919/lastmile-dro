@@ -1,0 +1,79 @@
+2026-01-10 02:49:56,079 - ejor - INFO - ======================================================================
+2026-01-10 02:49:56,079 - ejor - INFO - ε-SHIFT RULE: SIMULATION AND OUTPUT GENERATION
+2026-01-10 02:49:56,079 - ejor - INFO - ======================================================================
+2026-01-10 02:49:56,079 - ejor - INFO - 
+[STEP 1] Running simulations...
+2026-01-10 02:49:56,079 - ejor.simulation - INFO - SimulationEngine: p*=0.3800, p^DRO=0.3600
+2026-01-10 02:49:56,079 - ejor.simulation - INFO - ============================================================
+2026-01-10 02:49:56,079 - ejor.simulation - INFO - Starting simulation suite
+2026-01-10 02:49:56,080 - ejor.simulation - INFO - ============================================================
+2026-01-10 02:49:56,080 - ejor.simulation - INFO - Running scenario experiments...
+2026-01-10 02:49:56,228 - ejor.simulation - INFO - Running structural necessity...
+2026-01-10 02:49:56,394 - ejor.simulation - INFO - Running threshold structure...
+2026-01-10 02:49:56,395 - ejor.simulation - INFO - Running decision regime...
+2026-01-10 02:49:56,398 - ejor.simulation - INFO - Running OOS performance...
+2026-01-10 02:49:56,448 - ejor.simulation - INFO - Running safe zone...
+2026-01-10 02:49:57,378 - ejor.simulation - INFO - Running CVaR comparison...
+2026-01-10 02:49:57,827 - ejor.simulation - INFO - Running sensitivity...
+2026-01-10 02:49:57,827 - ejor.simulation - INFO - Running supply uncertainty...
+2026-01-10 02:49:57,838 - ejor.simulation - INFO - ============================================================
+2026-01-10 02:49:57,839 - ejor.simulation - INFO - Complete
+2026-01-10 02:49:57,839 - ejor.simulation - INFO - ============================================================
+2026-01-10 02:49:57,839 - ejor - INFO - 
+[STEP 2] Saving results to JSON...
+2026-01-10 02:49:57,844 - ejor - INFO -   ✓ Saved to outputs/data/results.json
+2026-01-10 02:49:57,845 - ejor - INFO - 
+[STEP 3] Generating figures...
+2026-01-10 02:49:57,845 - ejor.visualization - INFO - FigureGenerator ready: outputs/figures
+2026-01-10 02:49:57,845 - ejor.visualization - INFO - ============================================================
+2026-01-10 02:49:57,846 - ejor.visualization - INFO - Generating figures
+2026-01-10 02:49:57,846 - ejor.visualization - INFO - ============================================================
+2026-01-10 02:49:59,079 - ejor.visualization - INFO -   ✓ fig1_structural_necessity
+2026-01-10 02:49:59,696 - ejor.visualization - INFO -   ✓ fig2_threshold_structure
+2026-01-10 02:50:00,583 - ejor.visualization - INFO -   ✓ fig3_decision_regime
+2026-01-10 02:50:01,116 - ejor.visualization - INFO -   ✓ fig4_oos_performance
+2026-01-10 02:50:01,852 - ejor.visualization - INFO -   ✓ fig5_safe_zone
+2026-01-10 02:50:02,385 - ejor.visualization - INFO -   ✓ fig6_cvar_comparison
+2026-01-10 02:50:02,763 - ejor.visualization - INFO -   ✓ fig7_scenario_c
+2026-01-10 02:50:03,233 - ejor.visualization - INFO -   ✓ fig8_sensitivity
+2026-01-10 02:50:03,862 - ejor.visualization - INFO -   ✓ fig9_supply_uncertainty
+2026-01-10 02:50:04,285 - ejor.visualization - INFO -   ✓ fig10_calculator
+2026-01-10 02:50:04,285 - ejor.visualization - INFO - ============================================================
+2026-01-10 02:50:04,285 - ejor.visualization - INFO - All figures complete
+2026-01-10 02:50:04,285 - ejor.visualization - INFO - ============================================================
+2026-01-10 02:50:04,285 - ejor - INFO - 
+[STEP 4] Generating LaTeX outputs...
+2026-01-10 02:50:04,286 - ejor.outputs - INFO - OutputGenerator ready
+2026-01-10 02:50:04,286 - ejor.outputs - INFO - ============================================================
+2026-01-10 02:50:04,287 - ejor.outputs - INFO - Generating outputs
+2026-01-10 02:50:04,287 - ejor.outputs - INFO - ============================================================
+2026-01-10 02:50:04,287 - ejor.outputs - INFO -   ✓ numerical_values.tex
+2026-01-10 02:50:04,287 - ejor.outputs - INFO -   ✓ table_scenario_b.tex
+2026-01-10 02:50:04,288 - ejor.outputs - INFO -   ✓ table_cvar.tex
+2026-01-10 02:50:04,288 - ejor.outputs - INFO - ============================================================
+2026-01-10 02:50:04,288 - ejor.outputs - INFO - All outputs complete
+2026-01-10 02:50:04,288 - ejor.outputs - INFO - ============================================================
+2026-01-10 02:50:04,288 - ejor - INFO - 
+======================================================================
+2026-01-10 02:50:04,288 - ejor - INFO - VALIDATION SUMMARY
+2026-01-10 02:50:04,288 - ejor - INFO - ======================================================================
+2026-01-10 02:50:04,288 - ejor - INFO -   p* = 0.380
+2026-01-10 02:50:04,288 - ejor - INFO -   p^DRO = 0.360
+2026-01-10 02:50:04,288 - ejor - INFO -   L = Qc = 72000 JPY (uniform)
+2026-01-10 02:50:04,288 - ejor - INFO - 
+  Scenario B (N=20):
+2026-01-10 02:50:04,288 - ejor - INFO -     SAA oracle match: 59.5%
+2026-01-10 02:50:04,288 - ejor - INFO -     DRO oracle match: 87.2%
+2026-01-10 02:50:04,289 - ejor - INFO -     Advantage: +27.7 pp
+2026-01-10 02:50:04,289 - ejor - INFO - 
+  Structural Necessity (Figure 1c):
+2026-01-10 02:50:04,289 - ejor - INFO -     α=0%: mismatch rate = 0.0% (should be 0.0%)
+2026-01-10 02:50:04,289 - ejor - INFO -     α=10%: mismatch rate = 9.0%
+2026-01-10 02:50:04,289 - ejor - INFO -     α=25%: mismatch rate = 10.2%
+2026-01-10 02:50:04,289 - ejor - INFO -   ✓ Figure 1(c) bug FIXED: α=0% correctly shows 0% mismatch
+2026-01-10 02:50:04,289 - ejor - INFO - 
+======================================================================
+2026-01-10 02:50:04,289 - ejor - INFO - COMPLETE
+2026-01-10 02:50:04,289 - ejor - INFO - ======================================================================
+2026-01-10 02:50:04,290 - ejor - INFO - 
+Results saved to: outputs/data/results.json

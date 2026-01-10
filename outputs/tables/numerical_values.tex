@@ -1,0 +1,53 @@
+% Auto-generated numerical values
+% Single Source of Truth: results.json
+% USAGE: Include this file in your LaTeX document and use the macros below.
+% DO NOT hardcode these values in the manuscript!
+
+% =============================================================================
+% BASE PARAMETERS (Table 6)
+% =============================================================================
+\newcommand{\paramW}{1800}           % SD wage (JPY/hour)
+\newcommand{\paramT}{8}            % Shift length (hours)
+\newcommand{\paramC}{360}          % GW cost (JPY/pkg)
+\newcommand{\paramQ}{200}          % Package volume
+\newcommand{\paramRho}{200}        % Density (pkg/km²)
+\newcommand{\paramEpsilon}{0.02}    % Robustness parameter
+\newcommand{\paramL}{72000}        % Lipschitz constant (JPY)
+\newcommand{\paramGamma}{5.0}        % Price ratio w/c
+
+% =============================================================================
+% THRESHOLDS
+% =============================================================================
+\newcommand{\pstar}{0.380}         % Deterministic threshold
+\newcommand{\pdro}{0.360}           % DRO threshold (ε=0.02)
+\newcommand{\pbarZero}{0.180}     % Capacity threshold m=0
+\newcommand{\pbarOne}{0.660}      % Capacity threshold m=1
+
+% =============================================================================
+% SCENARIO B - KEY CLAIMS (N=20, 1000 replications)
+% =============================================================================
+\newcommand{\scenarioBSAAMatch}{59.5}    % SAA oracle match (%)
+\newcommand{\scenarioBDROMatch}{87.2}    % DRO oracle match (%)
+\newcommand{\scenarioBAdvantage}{27.7}   % DRO advantage (pp)
+
+% =============================================================================
+% CVaR COMPARISON - SCENARIO C
+% =============================================================================
+\newcommand{\cvarScenarioCMatchNinety}{9.3}  % CVaR₀.₉ match (%)
+\newcommand{\cvarScenarioCMatchNinetyFive}{4.8}  % CVaR₀.₉₅ match (%)
+\newcommand{\cvarScenarioCGapNinety}{60.5}      % CVaR₀.₉ gap (%)
+\newcommand{\cvarScenarioCGapNinetyFive}{63.5}  % CVaR₀.₉₅ gap (%)
+
+% =============================================================================
+% SAFE ZONE
+% =============================================================================
+\newcommand{\safeZoneBetaMax}{0.8}
+\newcommand{\safeZoneEpsMin}{0.01}
+\newcommand{\safeZoneEpsMax}{0.02}
+
+% =============================================================================
+% SCENARIO DEFINITIONS
+% =============================================================================
+\newcommand{\scenarioAMean}{0.417}
+\newcommand{\scenarioBMean}{0.385}
+\newcommand{\scenarioCMean}{0.300}

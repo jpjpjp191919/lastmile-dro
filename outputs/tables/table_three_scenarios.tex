@@ -1,0 +1,17 @@
+% TABLE: Three Scenarios - Auto-generated from results.json
+\begin{table}[htbp]
+\centering
+\caption{Performance Across Three Scenarios ($N=20$, 1,000 replications)}
+\label{tab:three_scenarios}
+\begin{tabular}{lcccccc}
+\toprule
+& \multicolumn{2}{c}{Distribution} & \multicolumn{2}{c}{Oracle Match (\%)} & \multicolumn{2}{c}{Analysis} \\
+\cmidrule(lr){2-3} \cmidrule(lr){4-5} \cmidrule(lr){6-7}
+Scenario & $\mu$ & $\sigma$ & SAA & DRO & $m^*$ & Gap to $p^*$ \\
+\midrule
+A (Safe) & 0.450 & 0.080 & 95.9 & 99.8 & 1 & +7.0 pp \\
+B (Boundary) & 0.385 & 0.080 & 59.5 & \textbf{87.2} & 1 & +0.5 pp \\
+C (Low) & 0.300 & 0.060 & 100.0 & 100.0 & 0 & $-$8.0 pp \\
+\bottomrule
+\end{tabular}
+\end{table}

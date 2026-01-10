@@ -1,0 +1,22 @@
+% TABLE: CVaR Comparison - Auto-generated from results.json
+\begin{table}[htbp]
+\centering
+\caption{CVaR vs DRO: Design-Driven vs Adaptive Conservatism ($N=20$, 1,000 replications)}
+\label{tab:cvar_full}
+\small
+\begin{tabular}{lccccc}
+\toprule
+Scenario & SAA & DRO & CVaR$_{0.90}$ & CVaR$_{0.95}$ & Oracle $m^*$ \\
+\midrule
+\multicolumn{6}{l}{\textit{Oracle Match Rate (\%)}} \\
+A ($\mu=0.450$) & 95.4 & 99.5 & 100.0 & 100.0 & 1 \\
+B ($\mu=0.385$) & 56.1 & 88.8 & 100.0 & 100.0 & 1 \\
+C ($\mu=0.300$) & 100.0 & \textbf{99.9} & 9.3 & 4.8 & 0 \\
+\midrule
+\multicolumn{6}{l}{\textit{Cost Gap vs Oracle (\%)}} \\
+A ($\mu=0.450$) & 0.8 & 0.1 & 0.0 & 0.0 & --- \\
+B ($\mu=0.385$) & 1.0 & 0.3 & 0.0 & 0.0 & --- \\
+C ($\mu=0.300$) & 0.0 & 0.1 & \textbf{60.5} & \textbf{63.5} & --- \\
+\bottomrule
+\end{tabular}
+\end{table}

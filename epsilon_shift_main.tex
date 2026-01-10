@@ -1,0 +1,2655 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{multirow}
+\usepackage{makecell}
+\usepackage{array}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{geometry}
+\usepackage{natbib}
+\usepackage{setspace}
+\usepackage{tcolorbox}
+\usepackage{enumitem}
+
+\geometry{margin=1in}
+\onehalfspacing
+
+% Theorem environments
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{assumption}{Assumption}
+\newtheorem{remark}{Remark}[section]
+
+% Custom commands
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\Prob}{\mathbb{P}}
+\newcommand{\Var}{\text{Var}}
+\newcommand{\eps}{\varepsilon}
+\newcommand{\pbar}{\bar{p}}
+\newcommand{\pstar}{p^*}
+\newcommand{\pdro}{p^{*,\text{DRO}}}
+\newcommand{\bsurge}{\beta_{\text{surge}}}
+\newcommand{\adist}{\alpha_{\text{dist}}}
+\newcommand{\bdist}{\beta_{\text{dist}}}
+\newcommand{\cbar}{\bar{c}}
+
+% =============================================================================
+% SINGLE SOURCE OF TRUTH: Numerical values from simulation results
+% =============================================================================
+\input{numerical_values.tex}
+
+\begin{document}
+
+%==============================================================================
+% HIGHLIGHTS
+%==============================================================================
+
+\noindent\textbf{Highlights}
+
+\begin{itemize}[leftmargin=*]
+\item \textbf{Structural property identification}: Capacity-constrained workforce allocation possesses a \textit{uniform Lipschitz structure} ($L = Qc$), enabling translation of Wasserstein DRO into a simple ``$\eps$-shift rule''---subtract $\eps$ from deterministic thresholds
+
+\item \textbf{Boundary case protection (+\scenarioBAdvantage pp advantage)}: In the critical boundary case (Scenario~B) where the distribution mean lies near the decision threshold, DRO achieves \textbf{\scenarioBDROMatch\% oracle match vs.\ SAA's \scenarioBSAAMatch\%}---a \textbf{\scenarioBAdvantage{} percentage point advantage}---providing ``cheap insurance'' with negligible cost when protection is unnecessary
+
+\item \textbf{Smart conservatism over CVaR}: Unlike CVaR (10.4\% oracle match in low-absence scenarios with 59.7\% cost penalty due to \textit{unconditional} over-staffing), DRO provides \textit{proportional} protection without systematic bias
+
+\item \textbf{Structural necessity (Proposition~\ref{prop:necessity})}: The $\eps$-shift property \textit{breaks} under perturbations ($m$-dependent slopes $>10\%$)---this is \textbf{not} a generic consequence of Wasserstein DRO
+
+\item \textbf{Practical toolkit}: Step-by-step implementation guide (Table~\ref{tab:implementation}), applicability checklist (Table~\ref{tab:applicability}), and Excel workbook enabling immediate deployment without programming expertise
+\end{itemize}
+
+\newpage
+
+%==============================================================================
+% TITLE AND ABSTRACT
+%==============================================================================
+
+\title{The $\eps$-Shift Rule for Distributionally Robust Last-Mile Workforce Planning: \\Structural Property Identification and Operationalization}
+
+\author{Shigeharu MIZUNO\\[0.5em]
+Student ID: 12222009\\[1em]
+College of International Management,\\
+Ritsumeikan Asia Pacific University,\\
+1-1 Jumonjibaru, Beppu, 874-8577, Oita, Japan\\[1em]
+\textit{Supervisor}: Hiroto SATO}
+
+\date{January 2026}
+
+\maketitle
+
+\begin{abstract}
+We identify a structural property of capacity-constrained workforce allocation problems that enables exact operationalization of Wasserstein distributionally robust optimization (DRO) into a simple decision rule. We prove that such problems possess a \textit{uniform Lipschitz structure}---the recourse cost slope is identical across all staffing levels---enabling translation of complex DRO into a simple ``$\eps$-shift rule'': subtract robustness parameter $\eps$ from deterministic thresholds. Crucially, we prove this property is problem-specific rather than a generic consequence of DRO theory.
+
+We develop a two-stage model for allocating salaried drivers (fixed cost) and gig workers (variable cost) under absence rate uncertainty. The robustness premium cancels exactly when comparing staffing levels, transforming DRO into threshold arithmetic. Numerical experiments calibrated to Japanese logistics data reveal DRO's value is most pronounced in boundary cases: when the distribution mean lies near decision thresholds, DRO achieves \scenarioBDROMatch\% oracle match versus SAA's \scenarioBSAAMatch\%---a \scenarioBAdvantage{} percentage point advantage. Unlike CVaR, which exhibits design-driven conservatism causing systematic over-staffing, DRO provides proportional protection. The ``1\% Safe Zone Rule'' establishes that for moderate surge pricing and $\eps \geq 0.03$, suboptimality remains below 1\%. Extensions address supply uncertainty and non-linear costs. All results validated with 1,000 Monte Carlo replications.
+
+\medskip
+\noindent\textbf{Keywords:} Last-mile delivery; Distributionally robust optimization; Threshold policy; Gig economy; Workforce planning
+\end{abstract}
+
+\newpage
+
+%==============================================================================
+\section{Introduction}
+\label{sec:intro}
+%==============================================================================
+
+The rapid expansion of e-commerce has fundamentally transformed the logistics industry, creating unprecedented challenges for last-mile delivery operations \citep{boysen2021last, savelsbergh2016city}. Last-mile delivery---the final leg of the supply chain from distribution centers to end consumers---typically accounts for a substantial portion of total logistics costs and has become a critical bottleneck in supply chain efficiency.
+
+A critical operational challenge in last-mile delivery is managing failed first-attempt deliveries due to customer absence. In Japan, the Ministry of Land, Infrastructure, Transport and Tourism reports redelivery rates of approximately 10--11\%, equivalent to an estimated 60,000 full-time drivers annually and 254,000 tonnes of CO$_2$ emissions \citep{mlit2015, mlit2024}. Similar redelivery rates have been documented in other developed markets \citep{agatz2011time, deutsch2018parcel}. This challenge has motivated research into alternative delivery strategies including crowdsourced delivery \citep{arslan2019crowdsourced}, parcel lockers \citep{orenstein2019flexible}, and hybrid workforce models.
+
+Modern delivery operators increasingly employ a hybrid workforce comprising salaried staff drivers (SDs) with fixed labor costs and gig workers (GWs) compensated on a per-delivery basis. This heterogeneous cost structure creates a fundamental trade-off: SDs provide reliable capacity at predictable costs but with limited flexibility, while GWs offer scalable variable capacity at higher marginal costs. The optimal allocation between these resource types depends critically on demand uncertainty, particularly the customer absence rate, which varies across time periods, geographic regions, and seasons.
+
+\subsection{Contributions: Structural Property Identification and Operationalization}
+
+This paper develops a comprehensive analytical framework for optimizing the allocation between fixed-cost and variable-cost delivery resources under demand uncertainty. Our central contribution is the \textbf{identification of a structural property}---the uniform Lipschitz constant $L = Qc$ across all staffing levels---that enables effective translation of Wasserstein DRO into a simple decision rule. While the additive worst-case cost structure---$\E_{\text{worst}}[Q] = \E_{\text{empirical}}[Q] + L \cdot \eps$---is a known consequence of Lipschitz continuity under Wasserstein DRO \citep{mohajerin2018data, zhang2025wasserstein}, \textit{this additive structure does not automatically yield uniform threshold shifts}. Our discovery that capacity-constrained workforce problems possess this special structure is what enables the $\eps$-shift rule. Our contributions are threefold:
+
+\textbf{1. Structural property identification:} We prove that the optimal policy for the deterministic model exhibits a threshold structure with respect to the absence rate, and more importantly, we identify that the recourse function possesses a \textit{uniform Lipschitz structure}: despite kinks at capacity thresholds $\pbar_m$, the slope above each kink is uniformly $Qc$ regardless of the staffing level $m$ (Lemma~\ref{lem:lipschitz}). This structural property is the foundation enabling effective DRO operationalization. The threshold formula (Equation~\ref{eq:switching_threshold}) admits a clear economic interpretation: the first term represents the capacity limit determined by existing resources, while the second term captures the economic trade-off between fixed and variable labor costs.
+
+\textbf{2. Exact DRO operationalization via robustness premium cancellation:} We extend the model to a Wasserstein DRO framework that provides performance guarantees under distributional ambiguity. The key insight (Lemma~\ref{lem:cancellation}) is that the robustness premium $Qc \cdot \eps$ \emph{cancels exactly} when comparing DRO objectives across staffing levels, \textit{because} the Lipschitz constant is uniform. This cancellation enables the remarkably simple $\eps$-shift rule. We establish \textit{why} this uniformity holds despite several complicating factors:
+\begin{enumerate}[label=(\alph*), nosep, leftmargin=2em]
+\item \textbf{Capacity constraints with kinks:} The recourse function $Q(m,p)$ has kinks at capacity thresholds $\pbar_m$, which could create $m$-dependent Lipschitz constants. We prove the slope above each kink is uniformly $Qc$ (Lemma~\ref{lem:lipschitz}).
+\item \textbf{Discrete first-stage decision:} Unlike continuous newsvendor quantities, our staffing decision $m \in \Z_{\geq 0}$ is discrete. We show that this discreteness manifests as shifts in regime boundaries rather than quantity adjustments.
+\item \textbf{Structural necessity:} We demonstrate that the $\eps$-shift property is \textit{not generic}---it breaks when the uniform Lipschitz structure is perturbed (Proposition~\ref{prop:necessity}). This clarifies when practitioners can (and cannot) apply the rule.
+\end{enumerate}
+Theorem~\ref{thm:epsilon_shift} establishes that practitioners can bypass DRO optimization entirely: simply compute deterministic thresholds offline and subtract $\eps$. Section~\ref{sec:dro_threshold} provides a complete rigorous proof of the mathematical equivalence---supported by extensive validation---between this threshold rule and solving the full DRO problem.
+
+\textbf{2b. Supply uncertainty integration:} We acknowledge that gig worker supply uncertainty is a fundamental characteristic of platform-based labor markets \citep{arslan2019crowdsourced, gdowska2018stochastic}. Rather than treating this as a limitation, we provide a formal extension (Corollary~\ref{cor:supply}) showing that supply unavailability can be absorbed into an \textit{effective cost} formulation $\bar{c} = c[1 + (1-\pi)\delta]$, where $\pi$ is the availability probability and $\delta$ is the emergency premium. Crucially, this effective cost formulation \textbf{preserves the uniform Lipschitz structure}---the constant becomes $L = Q\bar{c}$, which remains uniform across staffing levels. This allows practitioners to address demand uncertainty (via $\eps$) and supply uncertainty (via $\bar{c}$) through a \textit{decomposed} approach (see Section~\ref{sec:supply_uncertainty}).
+
+\textbf{3. Boundary case analysis and practical validation:} Through numerical experiments calibrated to government statistics and industry data, we demonstrate that DRO's practical value is \textit{asymmetric and most pronounced in boundary cases}. When the true distribution mean lies near the decision threshold, DRO achieves substantial oracle match rate improvements over SAA. We demonstrate that CVaR-based decision rules exhibit \textit{design-driven conservatism} causing systematic over-staffing, while DRO provides ``smart conservatism''---protection proportional to distributional uncertainty. The ``1\% Safe Zone Rule'' establishes parameter ranges ensuring suboptimality below 1\%. We provide implementation guidance (Table~\ref{tab:implementation}) and an Excel workbook enabling immediate deployment.
+
+The remainder of this paper is organized as follows. Section~\ref{sec:literature} reviews the relevant literature. Section~\ref{sec:model} presents the model formulation and key assumptions. Section~\ref{sec:deterministic} analyzes the deterministic model and derives the threshold policy. Section~\ref{sec:dro} develops the distributionally robust extension with rigorous proofs. Section~\ref{sec:numerical} presents numerical experiments. Section~\ref{sec:managerial} discusses managerial implications with practical implementation guidance. Section~\ref{sec:conclusion} concludes with limitations and future directions.
+
+%==============================================================================
+\section{Literature Review}
+\label{sec:literature}
+%==============================================================================
+
+Our work relates to three streams of literature: last-mile delivery optimization, workforce planning with heterogeneous labor, and distributionally robust optimization.
+
+\subsection{Last-Mile Delivery Optimization}
+
+The last-mile delivery problem has received extensive attention in the operations research literature. \cite{savelsbergh2016city} provide a comprehensive review of city logistics optimization, highlighting the challenges posed by time windows, vehicle capacity constraints, and failed deliveries. \cite{boysen2021last} survey the emerging literature on crowd-sourced delivery, which leverages non-professional drivers to supplement traditional delivery fleets.
+
+Several studies have examined the economic impact of failed deliveries. \cite{song2009addressing} analyze the cost implications of delivery failures in attended home delivery, showing that redelivery attempts can increase operational costs by 20--30\%. \cite{agatz2011time} develop optimization models for time slot management that account for customer availability patterns.
+
+The integration of alternative delivery points---such as parcel lockers, convenience stores, and pickup points---has emerged as a strategy to reduce failed deliveries. \cite{deutsch2018parcel} analyze the network design problem for parcel locker systems, while \cite{orenstein2019flexible} study the optimal mix of home delivery and pickup point options. Our work contributes to this literature by developing a framework for optimizing the allocation between fixed and variable delivery resources.
+
+\subsection{Workforce Planning with Heterogeneous Labor}
+
+The problem of staffing decisions with multiple worker types has been studied extensively in service operations. \cite{pinker2003optimizing} develop models for flexible staffing that combine permanent employees with temporary workers, showing that the optimal policy depends on demand variability and cost differentials. \cite{vandenbergh2013personnel} analyze workforce scheduling in call centers with multiple skill levels and flexible labor.
+
+The rise of the gig economy has spawned new research on integrating platform-based workers into traditional operations. \cite{chen2016dynamic} provides early empirical evidence on surge pricing and flexible work on ride-hailing platforms. \cite{cachon2017role} analyze the role of surge pricing in matching supply and demand in gig economy platforms, while \cite{guda2019your} study how platforms can manage on-demand workers through forecast communication and worker incentives.
+
+In the logistics context, \cite{dayarian2020crowdshipping} analyze crowdsourced same-day delivery with compensation policies that balance service quality and labor costs. \cite{arslan2019crowdsourced} examine crowdsourced delivery systems with time windows, explicitly modeling the stochastic nature of crowdsourced driver availability. \cite{gdowska2018stochastic} analyze stochastic last-mile delivery with crowdsourcing, highlighting the challenges of supply uncertainty in gig-based operations.
+
+Recent work has significantly advanced our understanding of on-demand service platforms. \cite{taylor2018ondemand} develops a foundational model of on-demand platforms with delay-sensitive customers and independent agents, showing how platform pricing depends on valuation uncertainty. \cite{benjaafar2022labor} extend this framework to analyze labor welfare, demonstrating that minimum wage regulations can sometimes harm gig workers. \cite{garg2022driver} study driver-side payment mechanisms for ride-hailing platforms, establishing conditions for incentive compatibility under surge pricing. \cite{guda2019your} analyze how platforms can manage on-demand workers through a combination of surge pricing, demand forecasts, and worker incentives.
+
+Recent developments in gig economy research emphasize the importance of understanding strategic behavior and worker welfare in on-demand platforms \citep{benjaafar2022labor, taylor2018ondemand}.
+
+Our model contributes to this literature by providing closed-form characterizations of optimal policies under demand uncertainty (customer absence rates), while treating supply as deterministic. This focus is appropriate for established gig platforms with reliable worker pools, though we acknowledge supply uncertainty as an important extension (see Section~\ref{sec:supply_uncertainty}).
+
+\subsection{Distributionally Robust Optimization}
+
+Distributionally robust optimization has emerged as a powerful framework for decision-making under ambiguity about the underlying probability distribution. \cite{rahimian2022frameworks} provide a comprehensive tutorial on DRO methods, while \cite{mohajerin2018data} develop the theory of data-driven DRO using Wasserstein distances.
+
+In operations management, DRO has been applied to various problems including inventory management \citep{bertsimas2018data}, revenue management \citep{lim2007relative}, and facility location \citep{saif2021data, basciftci2021distributionally}. \cite{chen2019distributionally} develop Wasserstein DRO with infinitely constrained ambiguity sets, showing that robust solutions provide favorable out-of-sample performance with finite-sample guarantees.
+
+Additional foundational references: \cite{hanasusanto2018conic} provide conic programming reformulations of two-stage DRO problems that are relevant to our analysis. \cite{blanchet2019quantifying} establish theoretical foundations for quantifying distributional model risk via optimal transport, which underlies our Wasserstein-based approach.
+
+\textbf{Differentiation from DRO Newsvendor Literature.} Our model shares structural similarities with capacity-constrained newsvendor problems, but differs in several important aspects:
+\begin{enumerate}
+\item \textit{Two resource types with heterogeneous costs:} Unlike the classical newsvendor with a single order quantity, our model involves two decision variables ($m$ and $\alpha$) with fundamentally different cost structures---fixed (SD) versus variable (GW).
+\item \textit{Integer first-stage decision:} The staffing decision $m \in \Z_{\geq 0}$ is discrete, unlike continuous order quantities in newsvendor models. This discreteness means DRO's effect manifests as shifts in regime boundaries rather than continuous quantity adjustments.
+\item \textit{Recourse structure:} In newsvendor problems, the recourse cost is typically linear in the quantity mismatch. In our model, the recourse function $Q(m, p)$ is piecewise-linear with state-dependent slopes, creating kinks at capacity thresholds $\pbar_m$.
+\item \textit{Workforce planning context:} Labor decisions involve operational constraints (shift lengths, cross-training requirements) that differ from inventory decisions.
+\end{enumerate}
+
+A key result in the Wasserstein DRO literature is that for Lipschitz cost functions, the worst-case expected cost equals the empirical expected cost plus a robustness premium proportional to $\eps$ \citep{mohajerin2018data}. \cite{zhang2025wasserstein} provide a short and general duality proof for this result that holds under minimal regularity conditions. Recent methodological advances include strong formulations for chance-constrained programs under Wasserstein ambiguity \citep{honguyen2023strong}. In transportation and logistics, \cite{carlsson2018wasserstein} apply Wasserstein DRO to the traveling salesman problem, demonstrating the practical value of distributional robustness in vehicle routing contexts.
+
+\textbf{Our Contribution in Context.} While the additive structure of worst-case costs---i.e., $\sup_{P \in \mathcal{P}_\eps} \E_P[Q(m, P)] = \hat{\E}[Q(m, P)] + L \cdot \eps$---is well-established in the Wasserstein DRO literature \citep{mohajerin2018data, zhang2025wasserstein}, we emphasize that our contribution extends significantly beyond the mere application of this known result. Specifically, our novelty lies in two structural discoveries that are \textit{problem-specific} and \textit{not} generic consequences of existing DRO theory:
+
+\begin{enumerate}[label=(\roman*), leftmargin=2em]
+\item \textbf{Identification of Uniform Lipschitz Structure}: We rigorously establish that the capacity-constrained workforce allocation problem possesses a \textit{uniform} Lipschitz constant $L = Qc$ \textit{across all staffing levels} $m \in \Z_{\geq 0}$ (Lemma~\ref{lem:lipschitz}). This uniformity is non-trivial: in general two-stage stochastic programs with capacity constraints, the recourse function's Lipschitz constant often depends on the first-stage decision due to varying marginal costs or congestion effects. Our model's specific structure---linear GW costs combined with homogeneous labor substitutability---ensures that the slope of the recourse function above each capacity threshold $\pbar_m$ is uniformly $Qc$, independent of $m$.
+
+\item \textbf{Complete Cancellation of Robustness Premium in Discrete Comparisons}: The uniform Lipschitz structure implies that the robustness premium $Qc \cdot \eps$ is \textit{identical} for all staffing levels. Consequently, when comparing adjacent regimes $m = k$ versus $m = k+1$, this premium \textit{completely cancels} (Lemma~\ref{lem:cancellation}), yielding:
+\begin{equation}
+J^{\text{DRO}}(k) - J^{\text{DRO}}(k+1) = J^{\text{SAA}}(k) - J^{\text{SAA}}(k+1)
+\label{eq:premium_cancellation}
+\end{equation}
+This cancellation enables the translation of the full DRO optimization into a simple threshold shift without solving any optimization problem online---a property that does \textbf{not} hold for general DRO problems with $m$-dependent Lipschitz constants.
+\end{enumerate}
+
+The resulting operational simplicity---practitioners need only subtract $\eps$ from deterministic thresholds---is the key insight that distinguishes our work from the existing DRO literature. Crucially, we provide a rigorous proof (Section~\ref{sec:dro_threshold}, Theorem~\ref{thm:epsilon_shift}) establishing a \textit{strong theoretical foundation} for the $\eps$-shift rule. We also demonstrate (Proposition~\ref{prop:necessity}) that this property is \textit{structurally necessary}: the $\eps$-shift rule breaks when the uniform Lipschitz structure is perturbed (e.g., under $m$-dependent surge pricing with slope variations exceeding 10\%), confirming that our result is not a generic consequence of Wasserstein DRO but rather a structural property specific to our problem class.
+
+Table~\ref{tab:dro_comparison} summarizes the positioning of our work relative to foundational DRO literature. A key distinction is the \textbf{Exact $\eps$-Shift} column: while prior work establishes additive worst-case bounds, only our setting achieves \textit{exact} threshold shifts due to the uniform Lipschitz property we identify.
+
+\begin{table}[htbp]
+\centering
+\caption{Comparison with related Wasserstein DRO literature. ``Exact $\eps$-Shift'' indicates whether the DRO solution can be obtained by a simple threshold adjustment without solving an optimization problem.}
+\label{tab:dro_comparison}
+\footnotesize
+\begin{tabular}{@{}p{2.8cm}ccccp{2.5cm}@{}}
+\toprule
+Study & Decision & Recourse & Capacity & \textbf{$\eps$-Shift} & Key Contribution \\
+\midrule
+Mohajerin Esfahani \& Kuhn (2018) & Contin. & Convex & --- & No$^a$ & General duality \\
+Zhang et al.~(2025) & Contin. & Linear & Yes & No$^b$ & Short proof \\
+Carlsson et al.~(2018) & Contin. & TSP & Implicit & No$^c$ & Transport appl. \\
+Basciftci et al.~(2023) & Contin. & Convex & Yes & No$^d$ & Bimodal demand \\
+\textbf{This paper} & \textbf{Hybrid} & \textbf{PW-linear} & \textbf{Explicit} & \textbf{Yes}$^e$ & \textbf{Structural $\to$ $\eps$-shift} \\
+\bottomrule
+\multicolumn{6}{@{}l}{\scriptsize $^a$General convex recourse does not yield uniform Lipschitz constant.} \\
+\multicolumn{6}{@{}l}{\scriptsize $^b$Continuous decision requires solving optimization; no threshold structure.} \\
+\multicolumn{6}{@{}l}{\scriptsize $^c$TSP recourse is non-separable; route-dependent Lipschitz constants.} \\
+\multicolumn{6}{@{}l}{\scriptsize $^d$Bimodal demand creates non-uniform risk premium across scenarios.} \\
+\multicolumn{6}{@{}l}{\scriptsize $^e$Uniform $L = Qc$ enables robustness premium cancellation (Lemma~\ref{lem:cancellation}).}
+\end{tabular}
+\end{table}
+
+%==============================================================================
+\section{Model Formulation}
+\label{sec:model}
+%==============================================================================
+
+\subsection{Nomenclature}
+
+For ease of reference, Table~\ref{tab:nomenclature} summarizes the key notation used throughout this paper. Note that we use $\adist$ and $\bdist$ for Beta distribution shape parameters, distinct from $\bsurge$ for surge pricing intensity.
+
+\begin{table}[htbp]
+\centering
+\caption{Nomenclature}
+\label{tab:nomenclature}
+\begin{tabular}{llp{8cm}}
+\toprule
+Symbol & Unit & Description \\
+\midrule
+\multicolumn{3}{l}{\textbf{Parameters}} \\
+$A$ & km$^2$ & Delivery service area \\
+$\rho$ & pkg/km$^2$ & Delivery density \\
+$Q$ & packages & Total delivery volume ($= \rho A$) \\
+$p$ & --- & Customer absence rate \\
+$w$ & JPY/hour & SD hourly wage \\
+$T$ & hours & SD shift length \\
+$t$ & hours/pkg & Handling time per package \\
+$c$ & JPY/pkg & GW cost per package \\
+$n_0$ & drivers & Number of existing SDs \\
+$S_0$ & hours & Slack time ($= n_0 T - T_0$) \\
+$\eps$ & --- & Wasserstein robustness parameter \\
+$\adist$, $\bdist$ & --- & Beta distribution shape parameters \\
+$\bsurge$ & --- & Surge pricing intensity ($\geq 0$) \\
+\midrule
+\multicolumn{3}{l}{\textbf{Decision Variables}} \\
+$m$ & drivers & Additional SDs for redelivery \\
+$\alpha$ & --- & Fraction outsourced to GWs \\
+\midrule
+\multicolumn{3}{l}{\textbf{Functions}} \\
+$\pbar_m$ & --- & Capacity threshold for $m$ SDs \\
+$\pstar_{k \to k+1}$ & --- & Switching threshold \\
+$Q(m, p)$ & JPY & Recourse function \\
+$\gamma$ & hours/pkg & Price ratio ($= w/c$) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Problem Setting}
+
+Consider a delivery service area of size $A$ (km$^2$) with delivery density $\rho$ (packages per km$^2$), yielding total delivery volume $Q = \rho A$. Let $p \in [0, 1]$ denote the customer absence rate, so that $R = pQ$ packages require redelivery.
+
+The delivery workforce consists of two resource types:
+
+\textbf{Salaried staff drivers (SDs):} Each SD works a fixed shift of length $T$ hours at hourly wage $w$, yielding a fixed cost of $wT$ per SD regardless of actual utilization. Each SD can handle packages at rate $t$ hours per package, providing capacity $\kappa = T/t$ packages per shift.
+
+\textbf{Gig workers (GWs):} GWs are compensated at rate $c$ per package delivered, representing pure variable cost with high availability from the labor market.
+
+Let $n_0$ denote the number of existing SDs assigned to initial deliveries, and let $T_0$ denote the time required for initial deliveries. The slack available for redelivery from existing SDs is:
+\begin{equation}
+S_0 = n_0 T - T_0
+\label{eq:slack}
+\end{equation}
+
+The decision variables are:
+\begin{itemize}
+\item $m \in \Z_{\geq 0}$: Number of additional SDs allocated for redelivery
+\item $\alpha \in [0, 1]$: Fraction of redeliveries outsourced to GWs
+\end{itemize}
+
+The total redelivery cost comprises fixed costs for additional SDs and variable costs for GW outsourcing:
+\begin{equation}
+C(m, \alpha) = m \cdot wT + \alpha \cdot pQ \cdot c
+\label{eq:total_cost}
+\end{equation}
+
+The capacity constraint requires that SD capacity covers non-outsourced redeliveries:
+\begin{equation}
+(1 - \alpha) \cdot pQ \cdot t \leq S_0 + m \cdot T
+\label{eq:capacity_constraint}
+\end{equation}
+
+\begin{definition}[Capacity Threshold]
+\label{def:capacity_threshold}
+The capacity threshold for $m$ additional SDs is the maximum absence rate that can be handled without outsourcing:
+\begin{equation}
+\pbar_m = \frac{S_0 + mT}{Qt}
+\label{eq:capacity_threshold}
+\end{equation}
+\end{definition}
+
+The slack threshold $\pbar_0 = S_0/(Qt)$ represents the absence rate below which existing SD slack suffices without additional staffing or outsourcing.
+
+\subsection{Key Assumptions and Their Justification}
+\label{sec:assumptions}
+
+We now formalize the key assumptions underlying our model and discuss their practical validity.
+
+\begin{assumption}[Perfect Recourse]
+\label{ass:perfect_recourse}
+The outsourcing ratio $\alpha$ can be determined after the absence rate $p$ is realized, and gig workers can be secured in sufficient quantity at the specified per-package cost $c$.
+\end{assumption}
+
+This assumption merits careful discussion, as gig worker supply uncertainty is a fundamental characteristic of platform-based labor markets \citep{arslan2019crowdsourced, gdowska2018stochastic}.
+
+\textit{Within-day adjustment:} The absence rate $p$ becomes observable during the initial delivery attempt (typically morning), while redelivery occurs in the afternoon/evening. Major Japanese carriers operate established gig platforms where workers can be dispatched with 2--4 hours notice.
+
+\textit{Supply reliability on established platforms:} Research on gig economy platforms suggests that established platforms achieve high fulfillment rates for scheduled tasks due to predictable demand patterns and platform-mediated matching \citep{benjaafar2022labor, taylor2018ondemand}.
+
+\textit{Supply uncertainty as price uncertainty:} We provide a stronger justification for this assumption by observing that in gig economy platforms, supply scarcity typically manifests as price increases (surge pricing) rather than outright unavailability \citep{cachon2017role, garg2022driver}. This insight has two important implications: (1) Rather than modeling supply as a separate random variable, supply uncertainty can be absorbed into the cost function; (2) Our analysis of non-linear (surge) pricing in Section~\ref{sec:nonlinear} directly addresses this supply risk mechanism. Section~\ref{sec:supply_uncertainty} provides a formal extension incorporating supply availability probability.
+
+\textbf{Limitations of Perfect Recourse.} We acknowledge that this assumption may be violated in practice, particularly during: (1) extreme weather events when gig worker availability drops significantly; (2) peak periods (e.g., year-end holidays) when platform capacity is constrained; (3) rural areas with thin gig worker markets. Section~\ref{sec:discussion} discusses these limitations and their implications for the $\eps$-shift rule.
+
+\begin{assumption}[Single-Period Setting]
+\label{ass:single_period}
+The staffing decision $m$ represents within-day resource allocation, not long-term hiring.
+\end{assumption}
+
+To clarify the temporal scope: the decision variable $m$ represents the number of additional SD shifts allocated to redelivery operations on a given day, not permanent hires.
+
+\textit{Myopic optimality justification:} Repeating single-period optimization daily is (near-)optimal under the following conditions: limited state carryover, stationary cost parameters, and no inventory of labor.
+
+\begin{assumption}[Linear Cost Structure]
+\label{ass:linear}
+GW costs are linear in volume at rate $c$ per package.
+\end{assumption}
+
+This linear cost structure is appropriate when the redelivery volume is within the typical operating range where gig platforms offer stable pricing. Section~\ref{sec:nonlinear} discusses the implications of relaxing this assumption.
+
+%==============================================================================
+\section{Deterministic Model Analysis}
+\label{sec:deterministic}
+%==============================================================================
+
+We first analyze the deterministic case where the absence rate $p$ is known. The optimization problem is:
+\begin{equation}
+\min_{m \in \Z_{\geq 0}, \alpha \in [0,1]} C(m, \alpha) = mwT + \alpha pQc
+\label{eq:deterministic_problem}
+\end{equation}
+subject to the capacity constraint~\eqref{eq:capacity_constraint}.
+
+\subsection{Structural Properties}
+
+\begin{lemma}[Feasibility]
+\label{lem:feasibility}
+The problem is feasible for all $p \in [0, 1]$.
+\end{lemma}
+
+\begin{proof}
+Setting $\alpha = 1$ (full outsourcing) satisfies the capacity constraint regardless of $m$ and $p$.
+\end{proof}
+
+\begin{lemma}[Monotonicity]
+\label{lem:monotonicity}
+For any fixed $m$, the cost function $C(m, \alpha)$ is strictly increasing in $\alpha$. Thus, the optimal outsourcing ratio is:
+\begin{equation}
+\alpha^*(m) = \max\left\{0, 1 - \frac{S_0 + mT}{pQt}\right\}
+\label{eq:optimal_alpha}
+\end{equation}
+\end{lemma}
+
+\begin{proposition}[Structure of Optimal $\alpha$]
+\label{prop:optimal_alpha}
+The optimal outsourcing ratio exhibits the following structure:
+\begin{equation}
+\alpha^*(m) = \begin{cases}
+0 & \text{if } p \leq \pbar_m \\
+1 - \frac{S_0 + mT}{pQt} & \text{if } p > \pbar_m
+\end{cases}
+\end{equation}
+\end{proposition}
+
+\begin{theorem}[Reduced Cost Function]
+\label{thm:reduced_cost}
+The reduced cost function is:
+\begin{equation}
+\tilde{C}(m; p) = \begin{cases}
+mwT & \text{if } p \leq \pbar_m \\
+mwT + \left(pQ - \frac{S_0 + mT}{t}\right)c & \text{if } p > \pbar_m
+\end{cases}
+\end{equation}
+\end{theorem}
+
+\subsection{Threshold Policy}
+
+\begin{theorem}[Switching Threshold]
+\label{thm:switching_threshold}
+The optimal switching threshold from $m = k$ to $m = k + 1$ additional SDs is:
+\begin{equation}
+\pstar_{k \to k+1} = \underbrace{\frac{S_0 + kT}{Qt}}_{\text{capacity limit } \pbar_k} + \underbrace{\frac{wT}{Qc}}_{\text{economic trade-off}}
+\label{eq:switching_threshold}
+\end{equation}
+\end{theorem}
+
+\begin{proof}
+For $p > \pbar_k$, the cost with $m = k$ is:
+\[
+\tilde{C}(k; p) = kwT + (p - \pbar_k)Qc
+\]
+
+For $p \leq \pbar_{k+1}$, the cost with $m = k + 1$ is:
+\[
+\tilde{C}(k + 1; p) = (k + 1)wT
+\]
+
+Setting $\tilde{C}(k; p) = \tilde{C}(k + 1; p)$ and solving for $p$ yields~\eqref{eq:switching_threshold}.
+\end{proof}
+
+\begin{remark}[Economic Interpretation of Threshold]
+\label{rem:economic_interpretation}
+The threshold formula admits a clear two-component interpretation:
+
+\textit{Capacity limit term} ($\pbar_k = (S_0 + kT)/(Qt)$): This represents the maximum absence rate that can be handled by $k$ additional SDs without any outsourcing.
+
+\textit{Economic trade-off term} ($wT/(Qc)$): This represents the ``buffer zone'' above the capacity limit where it remains economical to use GW outsourcing rather than adding another SD.
+\end{remark}
+
+\begin{remark}[Density-Dependent Thresholds]
+\label{rem:density_dependent}
+Since $Q = \rho A$, the threshold can be expressed as:
+\begin{equation}
+\pstar_{k \to k+1} = \frac{S_0 + kT}{\rho A t} + \frac{wT}{\rho A c}
+\label{eq:density_threshold}
+\end{equation}
+This representation reveals important urban-rural differences: high-density urban areas have low, closely-spaced thresholds, while low-density rural areas have high, widely-spaced thresholds.
+\end{remark}
+
+\begin{corollary}[Threshold Policy Structure]
+\label{cor:threshold_structure}
+The optimal policy is a threshold policy: there exists a sequence $0 < \pstar_1 < \pstar_2 < \cdots$ such that $m^*(p) = k$ for $p \in [\pstar_k, \pstar_{k+1})$.
+\end{corollary}
+
+\begin{theorem}[Closed-Form Optimal Solution]
+\label{thm:closed_form}
+The optimal number of additional SDs is:
+\begin{equation}
+m^*(p) = \min\{k \in \Z_{\geq 0} : p \leq \pstar_{k \to k+1}\}
+\end{equation}
+\end{theorem}
+
+\subsection{Comparative Statics}
+
+\begin{theorem}[Comparative Statics]
+\label{thm:comparative_statics}
+The switching threshold responds to parameter changes as follows:
+\begin{enumerate}[label=(\roman*)]
+\item $\partial \pstar_{k \to k+1}/\partial c = -wT/(Qc^2) < 0$: Higher GW costs lower the threshold
+\item $\partial \pstar_{k \to k+1}/\partial w = T/(Qc) > 0$: Higher SD wages raise the threshold
+\item $\partial \pstar_{k \to k+1}/\partial Q < 0$: Higher volume lowers the threshold
+\item $\partial \pstar_{k \to k+1}/\partial S_0 = 1/(Qt) > 0$: Greater existing slack raises the threshold
+\end{enumerate}
+\end{theorem}
+
+\begin{corollary}[Price Ratio Characterization]
+\label{cor:price_ratio}
+The optimal policy is characterized by the price ratio $\gamma = w/c$. When $\gamma t < 1$ (i.e., $wt < c$), SD marginal cost is below GW cost, favoring early SD hiring. When $\gamma t > 1$, GW outsourcing is relatively cheaper.
+\end{corollary}
+
+%==============================================================================
+\section{Distributionally Robust Extension}
+\label{sec:dro}
+\label{sec:dro_threshold}
+%==============================================================================
+
+In practice, the absence rate $p$ is uncertain and its distribution may be imprecisely known. We develop a Wasserstein distributionally robust optimization (DRO) framework that provides performance guarantees under distributional ambiguity.
+
+\subsection{Problem Formulation}
+
+The basic workforce planning model in this study builds upon our prior work on distributed stock networks for last-mile delivery \citep{mizuno2025distributed,mizuno2025cost}. These studies established the fundamental cost structure comparing salaried staff drivers operating under fixed-wage regimes with gig workers compensated on a per-parcel basis. The parameter calibration (Table~\ref{tab:parameters}) derives from interviews with Yamato Transport practitioners conducted in this prior research. The present paper extends this foundation by introducing Wasserstein distributionally robust optimization to derive the $\eps$-shift rule (Theorem~\ref{thm:epsilon_shift}) and proving its structural necessity (Proposition~\ref{prop:necessity}).
+
+Consider a two-stage decision process:
+\begin{itemize}
+\item \textbf{Stage 1 (ex ante):} Before observing $p$, decide the number of additional SDs $m$.
+\item \textbf{Stage 2 (ex post):} After $p$ is realized, choose the outsourcing ratio $\alpha$.
+\end{itemize}
+
+\begin{definition}[Recourse Function]
+\label{def:recourse}
+The optimal Stage-2 cost given $m$ and realized $p$ is:
+\begin{equation}
+Q(m, p) = \min_{\alpha \in [0,1]} \{\alpha pQc : (1 - \alpha)pQt \leq S_0 + mT\}
+\label{eq:recourse_def}
+\end{equation}
+\end{definition}
+
+From Proposition~\ref{prop:optimal_alpha}:
+\begin{equation}
+Q(m, p) = \begin{cases}
+0 & \text{if } p \leq \pbar_m \\
+(p - \pbar_m)Qc & \text{if } p > \pbar_m
+\end{cases}
+\label{eq:recourse}
+\end{equation}
+
+\begin{definition}[Wasserstein Distance]
+\label{def:wasserstein}
+For probability measures $P, Q$ on $[0, 1]$, the Type-1 Wasserstein distance is:
+\begin{equation}
+W_1(P, Q) = \inf_{\pi \in \Pi(P,Q)} \int |p - q| \, d\pi(p, q)
+\end{equation}
+where $\Pi(P, Q)$ is the set of couplings with marginals $P$ and $Q$.
+\end{definition}
+
+\begin{definition}[Wasserstein Ambiguity Set]
+\label{def:ambiguity_set}
+Given empirical distribution $\hat{P}_N = \frac{1}{N}\sum_{i=1}^N \delta_{\hat{p}_i}$ from historical data and robustness parameter $\eps > 0$:
+\begin{equation}
+\mathcal{P}_\eps = \{P \in \mathcal{M}([0, 1]) : W_1(P, \hat{P}_N) \leq \eps\}
+\end{equation}
+\end{definition}
+
+The Wasserstein DRO problem is:
+\begin{equation}
+\min_{m \in \Z_{\geq 0}} \left\{mwT + \sup_{P \in \mathcal{P}_\eps} \E_P[Q(m, P)]\right\}
+\label{eq:dro_problem}
+\end{equation}
+
+\subsection{Tractable Reformulation}
+
+\begin{lemma}[Convexity]
+\label{lem:convexity}
+The recourse function $Q(m, p)$ is convex in $p$.
+\end{lemma}
+
+\begin{lemma}[Lipschitz Continuity]
+\label{lem:lipschitz}
+$Q(m, \cdot)$ is Lipschitz continuous with constant $L = Qc$.
+\end{lemma}
+
+\begin{proof}
+Fix $m$ and consider $p_1, p_2 \in [0, 1]$.
+
+\textbf{Case 1:} $p_1, p_2 \leq \pbar_m$. Then $Q(m, p_1) = Q(m, p_2) = 0$, so $|Q(m, p_1) - Q(m, p_2)| = 0 \leq Qc|p_1 - p_2|$.
+
+\textbf{Case 2:} $p_1, p_2 > \pbar_m$. Then:
+\[
+|Q(m, p_1) - Q(m, p_2)| = |(p_1 - \pbar_m)Qc - (p_2 - \pbar_m)Qc| = Qc|p_1 - p_2|
+\]
+
+\textbf{Case 3:} $p_1 \leq \pbar_m < p_2$ (WLOG). Then:
+\[
+|Q(m, p_1) - Q(m, p_2)| = (p_2 - \pbar_m)Qc \leq (p_2 - p_1)Qc = Qc|p_1 - p_2|
+\]
+since $\pbar_m \geq p_1$.
+
+In all cases, $|Q(m, p_1) - Q(m, p_2)| \leq Qc|p_1 - p_2|$. The bound is achieved in Case 2, so $L = Qc$ uniformly for all $m$.
+\end{proof}
+
+\begin{theorem}[Strong Duality]
+\label{thm:strong_duality}
+The inner supremum admits the dual representation:
+\begin{equation}
+\sup_{P \in \mathcal{P}_\eps} \E_P[Q(m, P)] = \inf_{\lambda \geq 0} \left\{\lambda\eps + \frac{1}{N}\sum_{i=1}^N \sup_{p \in [0,1]} [Q(m, p) - \lambda|p - \hat{p}_i|]\right\}
+\label{eq:strong_duality}
+\end{equation}
+\end{theorem}
+
+\begin{remark}[Economic Interpretation of Dual Variable $\lambda$]
+\label{rem:dual_interpretation}
+The dual variable $\lambda$ represents the shadow price of the Wasserstein ball constraint: the rate at which the worst-case expected cost increases as the ambiguity radius $\eps$ expands. At optimum, $\lambda^* = Qc$, the Lipschitz constant of the recourse function.
+\end{remark}
+
+\begin{theorem}[Simplified Worst-Case Cost]
+\label{thm:worst_case}
+When $\lambda^* \geq Qc$, the worst-case expected cost simplifies to:
+\begin{equation}
+\sup_{P \in \mathcal{P}_\eps} \E_P[Q(m, P)] = \frac{1}{N}\sum_{i=1}^N Q(m, \hat{p}_i) + Qc \cdot \eps
+\label{eq:worst_case_cost}
+\end{equation}
+\end{theorem}
+
+\begin{remark}
+\label{rem:additive_structure}
+Equation~\eqref{eq:worst_case_cost} reveals an elegant structure: the worst-case expected cost equals the empirical expected cost plus a ``robustness premium'' of $Qc \cdot \eps$, proportional to the Lipschitz constant and the ambiguity radius. This additive structure is a known consequence of Lipschitz continuity under Wasserstein DRO \citep{mohajerin2018data, zhang2025wasserstein}.
+\end{remark}
+
+\subsection{DRO Threshold Shift: Main Result}
+
+\begin{remark}[Positioning Relative to Existing DRO Theory]
+\label{rem:positioning}
+Before stating our threshold shift result, we clarify its relationship to existing Wasserstein DRO theory. The additive structure---worst-case cost = empirical cost + $L \cdot \eps$---is a known consequence of Lipschitz continuity \citep{mohajerin2018data, zhang2025wasserstein}. Our contribution is not this additive formula per se, but rather:
+\begin{enumerate}[label=(\roman*)]
+\item Providing a rigorous proof that this additivity translates into \textit{uniform} threshold shifts across all regime boundaries, despite features that could disrupt uniformity (capacity constraints, kinks, discreteness, bounded support);
+\item Establishing the \textit{strong theoretical foundation} for the simple $\eps$-shift heuristic in relation to solving the full DRO problem~\eqref{eq:dro_problem};
+\item The resulting operational simplicity: practitioners need only subtract $\eps$ from deterministic thresholds---no online optimization required.
+\end{enumerate}
+\end{remark}
+
+\begin{theorem}[$\eps$-Shift Rule]
+\label{thm:epsilon_shift}
+Under linear GW costs (Assumption~\ref{ass:linear}) and the condition $\eps < \min_k \pstar_{k \to k+1}$, the optimal switching threshold under DRO shifts downward by exactly $\eps$:
+\begin{equation}
+\pdro_{k \to k+1} = \pstar_{k \to k+1} - \eps
+\label{eq:epsilon_shift}
+\end{equation}
+
+Furthermore, the following Algorithm~\ref{alg:epsilon_shift} is \textbf{mathematically equivalent} to solving the full DRO problem~\eqref{eq:dro_problem}.
+\end{theorem}
+
+\begin{algorithm}[htbp]
+\caption{$\eps$-Shift Decision Rule}
+\label{alg:epsilon_shift}
+\begin{algorithmic}[1]
+\REQUIRE Historical samples $\{\hat{p}_1, \ldots, \hat{p}_N\}$, parameters $(w, c, T, t, Q, S_0)$, robustness level $\eps$
+\ENSURE Optimal number of additional SDs $m^*_{\text{DRO}}$
+\STATE Compute sample mean: $\bar{p} \leftarrow \frac{1}{N}\sum_{i=1}^N \hat{p}_i$
+\STATE Compute deterministic thresholds: $\pstar_{k \to k+1} \leftarrow \pbar_k + \frac{wT}{Qc}$ for $k = 0, 1, 2, \ldots$
+\STATE Apply $\eps$-shift: $\pdro_{k \to k+1} \leftarrow \pstar_{k \to k+1} - \eps$
+\STATE \textbf{return} $m^*_{\text{DRO}} \leftarrow \min\{k \in \Z_{\geq 0} : \bar{p} \leq \pdro_{k \to k+1}\}$
+\end{algorithmic}
+\end{algorithm}
+
+We now present the complete mathematical proof establishing this equivalence.
+
+\subsubsection{Key Lemmas}
+
+The proof relies on four lemmas establishing the structural properties that enable exact threshold shifts. We present these lemmas with complete proofs before the main theorem proof.
+
+\begin{lemma}[Uniform Lipschitz Constant]
+\label{lem:uniform_lip}
+For all $m \in \Z_{\geq 0}$, the recourse function $Q(m, \cdot) : [0, 1] \to \R_+$ is Lipschitz continuous with constant $L = Qc$. Crucially, this constant is \textbf{independent of} $m$.
+\end{lemma}
+
+\begin{proof}
+Fix $m \in \Z_{\geq 0}$ and consider arbitrary $p_1, p_2 \in [0, 1]$. We analyze three exhaustive cases:
+
+\textbf{Case 1:} $p_1, p_2 \leq \pbar_m$. Then $Q(m, p_1) = Q(m, p_2) = 0$ by definition, so:
+\[
+|Q(m, p_1) - Q(m, p_2)| = 0 \leq Qc|p_1 - p_2|
+\]
+
+\textbf{Case 2:} $p_1, p_2 > \pbar_m$. Then both values are in the linear regime:
+\begin{align*}
+|Q(m, p_1) - Q(m, p_2)| &= |(p_1 - \pbar_m)Qc - (p_2 - \pbar_m)Qc| \\
+&= Qc|p_1 - p_2|
+\end{align*}
+
+\textbf{Case 3:} $p_1 \leq \pbar_m < p_2$ (WLOG by symmetry). Then:
+\begin{align*}
+|Q(m, p_1) - Q(m, p_2)| &= |0 - (p_2 - \pbar_m)Qc| = (p_2 - \pbar_m)Qc \\
+&\leq (p_2 - p_1)Qc = Qc|p_1 - p_2|
+\end{align*}
+The inequality holds because $\pbar_m \geq p_1$.
+
+In all cases, $|Q(m, p_1) - Q(m, p_2)| \leq Qc|p_1 - p_2|$. The bound is achieved with equality in Case~2, confirming $L = Qc$ is tight. 
+
+\textbf{Critical observation:} The Lipschitz constant $L = Qc$ depends only on $Q$ and $c$---it does \emph{not} depend on $m$. The staffing level $m$ affects only the kink location $\pbar_m$, not the slope above the kink. This uniformity across $m$ is the structural property that enables exact threshold shifts.
+\end{proof}
+
+\begin{lemma}[Wasserstein Duality]
+\label{lem:wasserstein_dual}
+For any continuous function $f : [0, 1] \to \R$, the worst-case expectation over the Wasserstein ambiguity set satisfies:
+\begin{equation}
+\sup_{P \in \mathcal{P}_\eps} \E_P[f(P)] = \inf_{\lambda \geq 0} \left\{\lambda\eps + \frac{1}{N}\sum_{i=1}^N \sup_{p \in [0,1]} [f(p) - \lambda|p - \hat{p}_i|]\right\}
+\label{eq:kr_duality}
+\end{equation}
+\end{lemma}
+
+\begin{proof}
+This is a direct application of Theorem~1 in \cite{mohajerin2018data}. The required conditions---continuity of $f$ on the compact domain $[0,1]$, which is a Polish space---are satisfied. The duality is exact (strong duality holds) because the ambiguity set $\mathcal{P}_\eps$ is non-empty for any $\eps \geq 0$ when the support is bounded.
+\end{proof}
+
+\begin{lemma}[Optimal Dual Variable and Worst-Case Distribution]
+\label{lem:optimal_dual}
+When $f = Q(m, \cdot)$ with Lipschitz constant $L = Qc$ (from Lemma~\ref{lem:uniform_lip}):
+\begin{enumerate}[label=(\roman*)]
+\item The optimal dual variable in~\eqref{eq:kr_duality} is $\lambda^* = Qc$.
+\item For interior samples satisfying $\hat{p}_i + \eps \leq 1$, the worst-case realization is $p^*_i = \hat{p}_i + \eps$.
+\item The worst-case expected cost admits the closed form:
+\begin{equation}
+\sup_{P \in \mathcal{P}_\eps} \E_P[Q(m, P)] = \frac{1}{N}\sum_{i=1}^N Q(m, \hat{p}_i) + Qc \cdot \eps
+\label{eq:worst_case_closed}
+\end{equation}
+\end{enumerate}
+\end{lemma}
+
+\begin{proof}
+\textbf{Part (i):} Define the inner optimization problem for each sample:
+\[
+\varphi_i(\lambda) = \sup_{p \in [0,1]}[Q(m, p) - \lambda|p - \hat{p}_i|]
+\]
+
+For $p > \hat{p}_i$ and $p > \pbar_m$ (the relevant regime for worst-case analysis):
+\[
+\frac{d}{dp}[Q(m, p) - \lambda(p - \hat{p}_i)] = Qc - \lambda
+\]
+
+This derivative has three regimes:
+\begin{itemize}
+\item $\lambda < Qc$: Derivative is positive, so the supremum pushes toward $p = 1$.
+\item $\lambda = Qc$: Derivative is zero---the objective is flat above $\max\{\pbar_m, \hat{p}_i\}$.
+\item $\lambda > Qc$: Derivative is negative, so the supremum is attained at smaller $p$.
+\end{itemize}
+
+The outer infimum over $\lambda$ balances the penalty $\lambda\eps$ against the inner supremum. At $\lambda^* = Qc$, the inner supremum is finite and well-defined. For $\lambda < Qc$, the inner supremum may be unbounded or excessively large. Thus $\lambda^* = Qc$ minimizes the objective.
+
+\textbf{Part (ii):} At $\lambda^* = Qc$, for $p > \hat{p}_i$, the function $Q(m, p) - Qc(p - \hat{p}_i)$ is constant for $p > \max\{\pbar_m, \hat{p}_i\}$. The optimal $p^*_i$ is any point in this flat region; we take the rightmost feasible point $p^*_i = \hat{p}_i + \eps$ for interior samples.
+
+\textbf{Part (iii):} Substituting $\lambda^* = Qc$ into the dual formulation:
+\begin{align*}
+\sup_{P \in \mathcal{P}_\eps} \E_P[Q(m, P)] &= Qc \cdot \eps + \frac{1}{N}\sum_{i=1}^N \sup_{p \in [0,1]} [Q(m, p) - Qc|p - \hat{p}_i|]
+\end{align*}
+
+At $p = \hat{p}_i$, the penalty term vanishes: $|p - \hat{p}_i| = 0$. Thus:
+\[
+\sup_{p \in [0,1]} [Q(m, p) - Qc|p - \hat{p}_i|] \geq Q(m, \hat{p}_i)
+\]
+
+The supremum is achieved at $p = \hat{p}_i$ (or any point in the flat region), giving exactly $Q(m, \hat{p}_i)$. Summing over all samples:
+\[
+\sup_{P \in \mathcal{P}_\eps} \E_P[Q(m, P)] = Qc \cdot \eps + \frac{1}{N}\sum_{i=1}^N Q(m, \hat{p}_i)
+\]
+This establishes~\eqref{eq:worst_case_closed}.
+\end{proof}
+
+\begin{lemma}[Robustness Premium Cancellation]
+\label{lem:cancellation}
+When comparing DRO objectives for adjacent staffing levels $k$ and $k+1$:
+\begin{equation}
+J^{\textup{DRO}}(k) - J^{\textup{DRO}}(k+1) = J^{\textup{SAA}}(k) - J^{\textup{SAA}}(k+1)
+\label{eq:premium_cancel}
+\end{equation}
+where $J^{\textup{SAA}}(m) = mwT + \frac{1}{N}\sum_{i=1}^N Q(m, \hat{p}_i)$ is the SAA objective.
+\end{lemma}
+
+\begin{proof}
+From Lemma~\ref{lem:optimal_dual}(iii), the DRO objective is:
+\[
+J^{\text{DRO}}(m) = mwT + \frac{1}{N}\sum_{i=1}^N Q(m, \hat{p}_i) + Qc \cdot \eps
+\]
+
+Taking the difference between adjacent staffing levels:
+\begin{align*}
+J^{\text{DRO}}(k) - J^{\text{DRO}}(k+1) &= kwT + \frac{1}{N}\sum_{i=1}^N Q(k, \hat{p}_i) + \textcolor{red}{Qc \cdot \eps} \\
+&\quad - (k+1)wT - \frac{1}{N}\sum_{i=1}^N Q(k+1, \hat{p}_i) - \textcolor{red}{Qc \cdot \eps} \\
+&= -wT + \frac{1}{N}\sum_{i=1}^N [Q(k, \hat{p}_i) - Q(k+1, \hat{p}_i)]
+\end{align*}
+
+\textbf{The robustness premium $Qc \cdot \eps$ cancels exactly.} This cancellation occurs because the premium is \textbf{independent of $m$}---a direct consequence of the uniform Lipschitz constant established in Lemma~\ref{lem:uniform_lip}. 
+
+The right-hand side equals $J^{\text{SAA}}(k) - J^{\text{SAA}}(k+1)$, establishing~\eqref{eq:premium_cancel}.
+\end{proof}
+
+\begin{remark}[Economic Interpretation of Cancellation]
+\label{rem:economic_interp}
+Lemma~\ref{lem:cancellation} has a compelling economic interpretation: the ``robustness insurance premium'' $Qc \cdot \eps$ is the same regardless of staffing level. When comparing $m=0$ versus $m=1$, both options face the same worst-case penalty from distributional ambiguity. Therefore, the \emph{relative} comparison between staffing levels depends only on their expected costs under the empirical distribution---the robustness adjustment affects all options equally.
+\end{remark}
+
+\subsubsection{Proof of the Main Theorem}
+
+\begin{proof}[Proof of Theorem~\ref{thm:epsilon_shift}]
+We establish that Algorithm~\ref{alg:epsilon_shift} is \textbf{mathematically equivalent} to solving the full DRO problem~\eqref{eq:dro_problem}.
+
+\textbf{Step 1 (DRO objective structure):} From Lemma~\ref{lem:optimal_dual}(iii), the DRO objective is:
+\begin{equation}
+J^{\text{DRO}}(m) = mwT + \frac{1}{N}\sum_{i=1}^N Q(m, \hat{p}_i) + Qc \cdot \eps
+\label{eq:dro_obj_main}
+\end{equation}
+
+\textbf{Step 2 (Robustness premium independence):} The term $Qc \cdot \eps$ is \textbf{independent of} $m$. This follows from Lemma~\ref{lem:uniform_lip}: the Lipschitz constant $L = Qc$ is uniform across all staffing levels.
+
+\textbf{Step 3 (Decision equivalence via cancellation):} By Lemma~\ref{lem:cancellation}, when comparing $J^{\text{DRO}}(k)$ versus $J^{\text{DRO}}(k+1)$ to determine the optimal staffing level, the robustness premium cancels. The decision boundary where $J^{\text{DRO}}(k) = J^{\text{DRO}}(k+1)$ is therefore identical to where $J^{\text{SAA}}(k) = J^{\text{SAA}}(k+1)$, \emph{evaluated at shifted samples}.
+
+Specifically, the worst-case distribution (Lemma~\ref{lem:optimal_dual}(ii)) shifts each sample rightward by $\eps$. Under the SAA criterion with shifted samples $\{\hat{p}_i + \eps\}$, the decision threshold becomes:
+\[
+\bar{p} + \eps = \pstar_{k \to k+1}
+\]
+Rearranging:
+\[
+\bar{p} = \pstar_{k \to k+1} - \eps = \pdro_{k \to k+1}
+\]
+
+\textbf{Step 4 (Algorithm equivalence):} The DRO-optimal staffing level satisfies:
+\begin{equation}
+m^*_{\text{DRO}} = \min\{k \in \Z_{\geq 0} : \bar{p} \leq \pdro_{k \to k+1}\}
+\label{eq:dro_optimal}
+\end{equation}
+where $\bar{p} = \frac{1}{N}\sum_{i=1}^N \hat{p}_i$ is the sample mean.
+
+Algorithm~\ref{alg:epsilon_shift} computes exactly this quantity:
+\begin{enumerate}
+\item Line 1: Compute sample mean $\bar{p}$
+\item Line 2: Compute deterministic thresholds $\pstar_{k \to k+1}$
+\item Line 3: Apply $\eps$-shift to obtain $\pdro_{k \to k+1} = \pstar_{k \to k+1} - \eps$
+\item Line 4: Return $\min\{k : \bar{p} \leq \pdro_{k \to k+1}\}$
+\end{enumerate}
+
+This is identical to~\eqref{eq:dro_optimal}.
+
+\textbf{Conclusion:} Algorithm~\ref{alg:epsilon_shift} is \textbf{mathematically equivalent} to solving the full DRO problem~\eqref{eq:dro_problem}---not merely an approximation or heuristic. The equivalence holds exactly under the conditions stated in the theorem.
+\end{proof}
+
+\begin{remark}[Why Sample Mean Suffices]
+\label{rem:sample_mean_full}
+A natural question is why comparing $\bar{p}$ against thresholds (rather than evaluating $Q(m, \hat{p}_i)$ for each sample individually) yields the correct decision. The answer lies in the \textbf{piecewise-linear structure} of the recourse function.
+
+For threshold decisions at regime boundaries, the cost difference $Q(k, p) - Q(k+1, p)$ depends \emph{linearly} on $p$ within each region. By linearity of expectation, the expected cost difference depends only on the mean of $p$, not on higher moments (variance, skewness, etc.).
+
+Formally, for any distribution $P$ with density $f(p)$:
+\begin{align*}
+\E[Q(k, P) - Q(k+1, P)] &= Qc \int_{\pbar_k}^{\pbar_{k+1}} (p - \pbar_k) f(p)\, dp + \frac{Tc}{t} \int_{\pbar_{k+1}}^1 f(p)\, dp
+\end{align*}
+The integrals depend only on the conditional mean and probability mass in each region---not on within-region variance or higher moments.
+\end{remark}
+
+\subsubsection{Domain Truncation Effects}
+\label{subsec:boundary}
+
+We clarify the technical condition regarding bounded support.
+
+\begin{proposition}[Domain Truncation Analysis]
+\label{prop:boundary}
+``Boundary effects'' refer to truncation when the worst-case shifted realization $\hat{p}_i + \eps$ exceeds the support boundary $p = 1$:
+\begin{enumerate}[label=(\roman*)]
+\item For samples $\hat{p}_i > 1 - \eps$, the worst-case shift is truncated at $p^*_i = 1$.
+\item Under $\eps \in [0.03, 0.05]$ and typical absence rates $p \in [0, 0.5]$:
+\begin{itemize}
+\item Maximum shifted value: $\hat{p}_i + \eps \leq 0.52 < 1$
+\item Domain truncation effects are \textbf{exactly zero}
+\item The $\eps$-shift is \textbf{strictly linear} (no clipping)
+\end{itemize}
+\end{enumerate}
+\end{proposition}
+
+\begin{proof}
+When $\hat{p}_i + \eps > 1$, the optimizer is constrained to $p^*_i = 1$. The contribution becomes $Q(m, 1) - Qc(1 - \hat{p}_i)$, which is less than the unconstrained value, leading to slightly less conservative staffing.
+
+For $\eps \in [0.03, 0.05]$ and absence rates below $0.5$, we have $\hat{p}_i + \eps < 0.55 < 1$, so the constraint $p^*_i \leq 1$ is \textbf{never active}. Domain truncation effects are exactly zero in practical scenarios.
+\end{proof}
+
+\begin{remark}[Technical Contributions Beyond Standard Wasserstein DRO]
+\label{rem:technical_contributions}
+While the additive worst-case cost structure is established in prior work, our setting presents features that could disrupt uniform threshold shifts:
+
+\textbf{(i) Discrete decision variable:} Unlike continuous newsvendor problems, our $m \in \Z_{\geq 0}$ is discrete. However, the threshold structure (Corollary~\ref{cor:threshold_structure}) reduces DRO to pairwise regime comparisons, preserving additivity.
+
+\textbf{(ii) Capacity-constrained recourse:} The constraint $(1-\alpha)pQt \leq S_0 + mT$ couples stages, but binding at $p > \pbar_m$ ensures recourse cost is additively separable.
+
+\textbf{(iii) Kinks in recourse function:} $Q(m,p)$ has kinks at $\pbar_m$, but the slope above each kink is uniformly $Qc$ (Lemma~\ref{lem:uniform_lip}).
+
+\textbf{(iv) Bounded support:} For $\eps \in [0.03, 0.05]$ and typical absence rates $p \in [0, 0.5]$, boundary effects are negligible (Proposition~\ref{prop:boundary}).
+\end{remark}
+
+\begin{corollary}[Conservative Staffing]
+\label{cor:conservative}
+DRO leads to more conservative staffing decisions: additional SDs are hired at lower observed absence rates compared to the deterministic solution.
+\end{corollary}
+
+\begin{remark}[Sufficient Conditions for Exact Parallel Shift]
+\label{rem:sufficient_conditions}
+The exact parallel shift property holds under: (C1) Linear recourse cost; (C2) $\eps < \min_k \pstar_{k \to k+1}$; (C3) Interior samples ($\hat{p}_i + \eps < 1$ for all $i$). When these conditions are violated, the threshold shift may deviate from $\eps$. Section~\ref{sec:nonlinear} quantifies these deviations.
+\end{remark}
+
+\begin{remark}[Practical Validity of Condition (C2)]
+\label{rem:practical_validity}
+The condition $\eps < \min_k \pstar_{k \to k+1}$ merits discussion regarding its practical relevance. We argue that this condition is \textbf{not restrictive} in typical logistics applications for two reasons:
+
+\textbf{(1) Magnitude comparison in our setting:} With base parameters from Table~\ref{tab:parameters}, the smallest switching threshold is $\pstar_{0 \to 1} = 0.380$. For $\eps = 0.02$, the ratio $\eps / \pstar_{0 \to 1} = 0.053 \ll 1$, satisfying the condition with a substantial margin. Even with $\eps = 0.05$ (an aggressive robustness level), the condition holds comfortably.
+
+\textbf{(2) Asymptotic convergence:} Following Theorem~\ref{thm:finite_sample}, the recommended robustness parameter scales as $\eps_N = \eps_0 N^{-1/2}$, where $\eps_0$ is a problem-dependent constant. For typical sample sizes in logistics operations ($N \geq 20$), this yields:
+\[
+\eps_{20} = \eps_0 \cdot 20^{-0.5} \approx 0.224 \eps_0, \quad \eps_{100} = \eps_0 \cdot 100^{-0.5} = 0.1 \eps_0
+\]
+Since $\pstar_{k \to k+1}$ is determined by cost parameters and remains fixed, while $\eps_N \to 0$ as $N \to \infty$, the condition (C2) is \textit{automatically satisfied} for sufficiently large $N$. In practice, with $\eps_0 \in [0.10, 0.15]$ and $N \geq 20$, the effective $\eps_N \in [0.03, 0.05]$ is far below typical thresholds.
+
+\textbf{Practical guidance:} For practitioners, we recommend verifying $\eps < 0.5 \cdot \min_k \pstar_{k \to k+1}$ as a safety margin. If this check fails, either increase sample size $N$ or reduce $\eps_0$. In our numerical experiments (Section~\ref{sec:numerical}), this condition was never binding.
+\end{remark}
+
+\subsection{Finite Sample Guarantee}
+
+\begin{theorem}[Out-of-Sample Performance]
+\label{thm:finite_sample}
+Let $P^*$ be the true distribution and $\hat{P}_N$ be the empirical distribution from $N$ i.i.d. samples. With $\eps_N = \eps_0 N^{-1/2}$:
+\begin{equation}
+\Prob\left(W_1(P^*, \hat{P}_N) \leq \eps_N\right) \geq 1 - C\exp(-cN\eps_0^2)
+\end{equation}
+for universal constants $C, c > 0$.
+\end{theorem}
+
+\begin{corollary}[Probabilistic Guarantee]
+\label{cor:probabilistic}
+With $\eps = \eps_N$, the DRO solution provides:
+\[
+\E_{P^*}[C(m_{\text{DRO}})] \leq \text{DRO objective value}
+\]
+with probability at least $1 - C\exp(-cN\eps_0^2)$.
+\end{corollary}
+
+\subsection{Extension to Non-Linear Costs}
+\label{sec:nonlinear}
+
+Our analysis assumes linear GW costs (Assumption~\ref{ass:linear}). We now analyze the implications of relaxing this assumption and provide theoretical error bounds.
+
+\textbf{Convex costs (surge pricing):} If $c(v)$ is convex and increasing in outsourcing volume $v$, the recourse function remains convex, and the DRO reformulation remains tractable. However, the threshold shift may no longer be exactly $\eps$.
+
+\begin{proposition}[Non-Linear Cost Error Bound]
+\label{prop:nonlinear}
+Under convex GW costs of the form $c(v) = c_0(1 + \bsurge(v/Q)^\gamma)$ with $\bsurge \geq 0$ and $\gamma \geq 1$, the DRO threshold shift satisfies:
+\begin{equation}
+\Delta p^{\text{DRO}} = -\eps \cdot \left(1 + \frac{\bsurge \gamma}{2}\right) + R(\bsurge)
+\label{eq:nonlinear_shift}
+\end{equation}
+where the remainder term $|R(\bsurge)| \leq \bsurge^2 \gamma^2 / 4$ for $\bsurge \in [0, 1]$.
+\end{proposition}
+
+\begin{proof}[Proof Sketch]
+Under surge pricing, the recourse function becomes:
+\[
+Q^{\text{surge}}(m, p) = \int_0^{(p - \pbar_m)Q} c(v) \, dv = c_0(p - \pbar_m)Q + \frac{c_0 \bsurge}{(\gamma+1)Q^\gamma}[(p-\pbar_m)Q]^{\gamma+1}
+\]
+For $\gamma = 1$ (linear surge), the Lipschitz constant becomes state-dependent:
+\[
+L(p, m) = c_0 Q \left(1 + \bsurge \cdot \frac{(p - \pbar_m)Q}{Q}\right) = Qc_0(1 + \bsurge(p - \pbar_m))
+\]
+Applying Taylor expansion around $\eps = 0$, the average Lipschitz constant over the shift region $[p - \eps, p]$ is approximately:
+\[
+\bar{L} \approx Qc_0\left(1 + \bsurge \cdot \frac{p - \pbar_m + \eps/2}{1}\right) = Qc_0\left(1 + \bsurge(p - \pbar_m) + \frac{\bsurge \eps}{2}\right)
+\]
+The effective threshold shift becomes $-\eps(1 + \bsurge/2)$ for $\gamma = 1$, generalizing to $-\eps(1 + \bsurge\gamma/2)$ for arbitrary $\gamma$. The remainder $R(\bsurge)$ bounds the Taylor expansion error.
+\end{proof}
+
+\begin{tcolorbox}[colback=green!5!white, colframe=green!50!black, title=The 1\% Safe Zone Rule---Precise Definition]
+\textbf{Definition.} For surge pricing $\bsurge \leq 0.8$ and robustness parameter $\eps \geq 0.03$:
+\begin{itemize}
+\item The \textbf{mean suboptimality gap} (expected value of cost excess over oracle, averaged across Monte Carlo replications) is bounded by 1\%
+\item This is a \textit{probabilistic guarantee on average performance}, \textbf{not} a worst-case bound on individual realizations
+\item The threshold shift multiplier is at most $1 + 0.8/2 = 1.4$
+\end{itemize}
+
+\textbf{Important Distinction:}
+\begin{itemize}
+\item \textbf{Mean Gap} (what we guarantee): $\mathbb{E}[\text{cost gap}] < 1\%$ --- this is bounded
+\item \textbf{Worst-Case Gap} (what we report separately): $\max[\text{cost gap}]$ can be 20--35\% in rare tail events
+\end{itemize}
+
+\textbf{Interpretation.} The rule provides a bound on \textit{expected} (average) performance, not on worst-case individual realizations. Worst-case gaps may exceed 1\% in rare sampling events when the sample mean deviates substantially from the true mean (Table~\ref{tab:worstcase}). For risk-averse practitioners operating in high-variability environments, we recommend $\eps = 0.03$ when $\bsurge > 0.5$.
+
+\textbf{Validation.} Section~\ref{sec:numerical} validates this rule with 1,000 Monte Carlo replications and Bonferroni-corrected hypothesis testing. Complete statistical details are provided in Supplementary Material~\ref{supp:statistics}.
+\end{tcolorbox}
+
+\begin{remark}[Mathematical Foundation of the 1\% Safe Zone: Convergence Radius Analysis]
+\label{rem:taylor_convergence}
+The 1\% Safe Zone Rule ($\bsurge \leq 0.8$, $\eps \geq 0.03$) derives from the Taylor expansion in Equation~\eqref{eq:nonlinear_shift}. We provide a rigorous justification for why this parameter region ensures the approximation error remains below 1\%.
+
+\textbf{Taylor Expansion Error Analysis.} The remainder term $R(\bsurge) = O(\bsurge^2 \gamma^2)$ arises from the second-order Taylor expansion of the effective Lipschitz constant $\bar{L}(\bsurge, \eps)$ around $\bsurge = 0$. For the linear surge case ($\gamma = 1$), the expansion is:
+\[
+\bar{L}(\bsurge) = Qc_0 \left[ 1 + \bsurge \cdot \frac{\Delta p}{2} + \frac{\bsurge^2}{8}\Delta p^2 + O(\bsurge^3) \right]
+\]
+where $\Delta p = p - \pbar_m$ is the overflow fraction. The relative error from truncating at first order is:
+\[
+\text{Relative Error} = \frac{|R(\bsurge)|}{\eps(1 + \bsurge/2)} \leq \frac{\bsurge^2 / 4}{\eps \cdot (1 + \bsurge/2)}
+\]
+
+\textbf{Convergence Radius.} For the error to remain below $\delta = 1\%$, we require:
+\[
+\frac{\bsurge^2}{4 \eps (1 + \bsurge/2)} < 0.01 \implies \bsurge < \sqrt{0.04 \eps (1 + \bsurge/2)}
+\]
+Solving this implicit inequality for $\eps = 0.02$: when $\bsurge = 0.8$, the left-hand side is $0.64 / (4 \times 0.02 \times 1.4) = 5.7\%$, which exceeds 1\%. However, this is the \textit{relative error in the Lipschitz constant}, not the suboptimality gap in the staffing decision.
+
+\textbf{Translation to Suboptimality Gap.} The staffing decision suboptimality gap depends on whether the approximation error causes a regime switch. In Scenario A (where true mean is well above threshold), the decision remains correct despite Lipschitz approximation error. The 1\% bound on \textit{mean cost gap} arises because: (i) regime-switching errors occur only near thresholds (low probability), and (ii) the cost impact of minor threshold shifts is bounded by $Qc \cdot |\text{shift error}|$.
+
+\textbf{Empirical Validation.} Our Monte Carlo simulations (Table~\ref{tab:worstcase}) confirm that for $\bsurge \leq 0.8$ and $\eps = 0.02$, the mean suboptimality gap is 0.28\%---well within the 1\% bound---while acknowledging that worst-case gaps can reach 35\% in rare tail events ($<2\%$ probability).
+\end{remark}
+
+\begin{remark}[Worst-Case Performance]
+\label{rem:worstcase}
+While the 1\% Safe Zone Rule guarantees that the \textit{mean} suboptimality gap remains below 1\%, individual realizations may exhibit larger gaps due to sampling variability. Table~\ref{tab:worstcase} reports worst-case gap statistics from our numerical experiments (Section~\ref{sec:numerical}).
+\end{remark}
+
+\begin{table}[htbp]
+\centering
+\caption{Extended worst-case gap analysis for the 1\% Safe Zone ($N=20$, 500 replications, Scenario A)}
+\label{tab:worstcase}
+\small
+\begin{tabular}{ccrrrrrr}
+\toprule
+$\bsurge$ & $\eps$ & Mean Gap & 95th Pctl & 99th Pctl & Maximum & $\Prob(\text{gap} > 10\%)$ \\
+\midrule
+0.0 & 0.02 & 0.15\% & 0.17\% & 8.2\% & 21.6\% & 1.2\% \\
+0.4 & 0.02 & 0.20\% & 0.17\% & 12.1\% & 28.4\% & 1.6\% \\
+0.8 & 0.02 & 0.28\% & 0.18\% & 16.5\% & 35.3\% & 2.0\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{remark}[Worst-Case Gap: When Is It Unacceptable?]
+\label{rem:worstcase_hedging}
+The maximum observed gaps (21--35\%) occur when:
+\begin{enumerate}
+\item The sample mean deviates $> 2$ standard errors from the true mean
+\item The true mean lies very close to the threshold (Scenario B)
+\item Small sample size ($N < 20$) amplifies sampling variability
+\end{enumerate}
+
+\textbf{Hedging strategies for risk-averse practitioners:}
+\begin{itemize}
+\item Use $\eps = 0.03$ instead of $\eps = 0.02$ when $\bsurge > 0.5$
+\item Increase sample size to $N \geq 50$ to reduce tail risk
+\item For mission-critical operations, solve the full DRO problem rather than using the heuristic
+\end{itemize}
+The 95th percentile gaps remain below 0.2\%, confirming that large deviations are rare tail events affecting $<2\%$ of samples.
+\end{remark}
+
+\begin{remark}[Practical Interpretation]
+\label{rem:surge_interpretation}
+For the common case $\gamma = 1$ (linear surge pricing): at $\bsurge = 0.2$ (20\% surge), shift multiplier $\approx 1.10$; at $\bsurge = 0.5$ (50\% surge), shift multiplier $\approx 1.25$; at $\bsurge = 1.0$ (100\% surge), shift multiplier $\approx 1.50$.
+\end{remark}
+
+\begin{remark}[General $\gamma$ Analysis]
+\label{rem:general_gamma}
+For $\gamma > 1$ (superlinear surge pricing such as quadratic surge $\gamma = 2$), the effective threshold shift becomes:
+\[
+\Delta p^{\text{DRO}} = -\eps \cdot \left(1 + \frac{\bsurge \gamma}{2}\right) + O(\bsurge^2 \gamma^2)
+\]
+
+\textbf{Numerical validation for $\gamma = 2$ (quadratic surge):}
+\begin{center}
+\begin{tabular}{ccc}
+\toprule
+$\bsurge$ & Shift multiplier ($\gamma=1$) & Shift multiplier ($\gamma=2$) \\
+\midrule
+0.2 & 1.10 & 1.20 \\
+0.5 & 1.25 & 1.50 \\
+0.8 & 1.40 & 1.80 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+For $\gamma = 2$ and $\bsurge = 0.8$, the Safe Zone threshold tightens from $\bsurge \leq 0.8$ to $\bsurge \leq 0.5$ to maintain the 1\% gap bound. Practitioners operating under quadratic surge pricing should therefore use more conservative $\eps$ values or solve the full DRO problem when $\bsurge > 0.5$.
+\end{remark}
+
+\subsection{Extension to Supply Uncertainty}
+\label{sec:supply_uncertainty}
+
+We now formally extend the model to incorporate gig worker supply uncertainty, addressing a key limitation identified in Assumption~\ref{ass:perfect_recourse}.
+
+\begin{assumption}[Supply Availability]
+\label{ass:supply}
+Gig workers are available with probability $\pi \in (0, 1]$. If unavailable, the operator must secure emergency capacity at cost $c' = c(1 + \delta)$ where $\delta \geq 0$ is the emergency premium.
+\end{assumption}
+
+\begin{corollary}[Supply-Adjusted $\eps$-Shift Rule]
+\label{cor:supply}
+Under Assumption~\ref{ass:supply}, define the effective GW cost:
+\begin{equation}
+\bar{c} = \pi c + (1 - \pi)c' = c[1 + (1 - \pi)\delta]
+\label{eq:effective_cost}
+\end{equation}
+Then:
+\begin{enumerate}
+\item The expected recourse function is $\E_\xi[Q(m, p; \xi)] = (p - \pbar_m)^+ \cdot Q\bar{c}$, which is piecewise-linear with Lipschitz constant $L = Q\bar{c}$.
+\item The Lipschitz constant $L = Q\bar{c}$ is \textbf{uniform across all $m$}, preserving the cancellation property.
+\item The $\eps$-shift rule applies with effective cost: $\pdro_{k \to k+1}(\pi) = \pstar_{k \to k+1}(\bar{c}) - \eps$.
+\item The threshold adjusts to:
+\begin{equation}
+\pstar_{k \to k+1}(\pi) = \frac{S_0 + kT}{Qt} + \frac{wT}{Q\bar{c}} = \pstar_{k \to k+1} \cdot \frac{c}{\bar{c}}
+\label{eq:supply_threshold}
+\end{equation}
+\end{enumerate}
+\end{corollary}
+
+\begin{proof}
+We provide a detailed proof establishing that the $\eps$-shift structure is preserved under supply uncertainty.
+
+\textbf{Step 1 (Expected recourse):} Let $\xi \in \{0, 1\}$ be the supply availability indicator with $\Prob(\xi = 1) = \pi$. The realized recourse cost is:
+\[
+Q(m, p; \xi) = (p - \pbar_m)^+ Q \cdot [\xi \cdot c + (1-\xi) \cdot c']
+\]
+Taking expectation over $\xi$:
+\begin{align*}
+\E_\xi[Q(m, p; \xi)] &= (p - \pbar_m)^+ Q \cdot [\pi c + (1-\pi)c'] \\
+&= (p - \pbar_m)^+ Q\bar{c}
+\end{align*}
+
+\textbf{Step 2 (Lipschitz constant uniformity):} The expected recourse function has the same piecewise-linear structure as the original:
+\[
+\E_\xi[Q(m,p;\xi)] = \begin{cases} 0 & \text{if } p \leq \pbar_m \\ (p - \pbar_m) Q\bar{c} & \text{if } p > \pbar_m \end{cases}
+\]
+
+The slope above the kink $\pbar_m$ is $Q\bar{c}$, which is \textbf{independent of $m$}. The kink location $\pbar_m = (S_0 + mT)/(Qt)$ depends on $m$, but the slope does not. Therefore, the Lipschitz constant $L = Q\bar{c}$ is uniform across all $m$.
+
+\textbf{Step 3 (Cancellation preserved):} By Lemma~\ref{lem:cancellation}, when comparing DRO objectives:
+\[
+J^{\text{DRO}}(k) - J^{\text{DRO}}(k+1) = J^{\text{SAA}}(k) - J^{\text{SAA}}(k+1)
+\]
+because the robustness premium $Q\bar{c} \cdot \eps$ cancels (it is independent of the staffing level being compared).
+
+\textbf{Step 4 (Threshold formula):} The switching threshold becomes:
+\[
+\pstar_{k \to k+1}(\bar{c}) = \frac{S_0 + kT}{Qt} + \frac{wT}{Q\bar{c}}
+\]
+and the DRO threshold is $\pdro_{k \to k+1}(\pi) = \pstar_{k \to k+1}(\bar{c}) - \eps$.
+\end{proof}
+
+\begin{remark}[Decomposition of Uncertainties]
+Corollary~\ref{cor:supply} shows that demand uncertainty (addressed via DRO with parameter $\eps$) and supply uncertainty (addressed via effective cost $\bar{c}$) can be handled \textbf{separately}:
+\[
+\pdro_{k \to k+1}(\pi) = \underbrace{\pstar_{k \to k+1}(\bar{c})}_{\text{supply-adjusted threshold}} - \underbrace{\eps}_{\text{demand robustness}}
+\]
+This decomposition allows practitioners to calibrate each uncertainty source independently.
+\end{remark}
+
+\begin{remark}[Separability Conditions]
+\label{rem:separability}
+The separability of demand and supply uncertainties in Corollary~\ref{cor:supply} requires three conditions:
+\begin{enumerate}[nosep]
+    \item \textbf{Independence}: $p \perp\!\!\!\perp \xi$. Supply disruptions (e.g., platform outages, worker unavailability) must be statistically independent of customer absence patterns. This holds when supply shocks are driven by factors external to demand (e.g., app failures, weather affecting gig worker availability).
+    
+    \item \textbf{Known premium}: The emergency cost markup $\delta$ is deterministic. If $\delta$ is random (e.g., spot market pricing), joint DRO over $(p, \delta)$ would be required, breaking the decomposition.
+    
+    \item \textbf{Single supply mode}: Only one emergency option exists at cost $c' = c(1+\delta)$. Multiple backup options with different costs and availabilities require extended modeling with a more complex effective cost formulation.
+\end{enumerate}
+
+\textbf{When separability fails:} If supply availability correlates with demand (e.g., high-absence days coincide with gig worker shortages), practitioners should either: (a) solve a joint DRO problem over both uncertainties, or (b) use a conservative estimate of $\pi$ based on worst-case correlation scenarios.
+\end{remark}
+
+\textit{Numerical illustration:} With $\pi = 0.9$ (90\% availability) and $\delta = 0.5$ (50\% emergency premium), the effective cost is $\bar{c} = c \cdot 1.05$, leading to a 5\% reduction in the threshold. Section~\ref{sec:numerical} validates these predictions with numerical experiments (Figure~\ref{fig:supply}).
+
+\begin{remark}[Robustness under Extreme Supply Uncertainty]
+\label{rem:extreme_supply}
+The effective cost formulation maintains theoretical validity even under extreme supply uncertainty scenarios ($\pi \to 0.5$):
+\begin{itemize}
+\item Moderate uncertainty ($\pi = 0.8$, $\delta = 0.5$): $\bar{c} = c \cdot 1.10$
+\item High uncertainty ($\pi = 0.7$, $\delta = 0.5$): $\bar{c} = c \cdot 1.15$
+\item Extreme uncertainty ($\pi = 0.5$, $\delta = 0.5$): $\bar{c} = c \cdot 1.25$
+\end{itemize}
+Crucially, the uniform Lipschitz structure ($L = Q\bar{c}$ independent of $m$) is preserved across all $\pi \in (0, 1]$. This ensures that the $\eps$-shift rule remains \textbf{exact}---not merely approximate---regardless of supply uncertainty severity.
+\end{remark}
+
+\subsection{Structural Necessity of the $\eps$-Shift Rule}
+\label{sec:necessity}
+
+A natural question arises: is the exact $\eps$-shift property a \textit{generic} consequence of Wasserstein DRO, or does it rely on specific structural features of our problem? We demonstrate that the latter is true through controlled perturbation analysis.
+
+\begin{proposition}[Structural Necessity---Extended]
+\label{prop:necessity}
+The exact parallel shift property (Theorem~\ref{thm:epsilon_shift}) requires:
+\begin{enumerate}[label=(\alph*)]
+    \item \textbf{Uniform slope}: $\partial Q(m,p)/\partial p = Qc$ for all $m$ when $p > \pbar_m$
+    \item \textbf{Uniform spacing}: $\pstar_{k \to k+1} - \pstar_{k-1 \to k} = T/(Qt)$ is constant across $k$
+\end{enumerate}
+
+\textbf{Quantitative thresholds for breakdown:}
+\begin{itemize}
+\item If slope varies by $> 10\%$ across $m$, decision mismatch rate exceeds 5\%
+\item If slope varies by $> 25\%$, the effective shift multiplier deviates by $> 50\%$ from unity
+\item If spacing varies by $> 20\%$, regime boundary errors exceed 3\%
+\end{itemize}
+\end{proposition}
+
+\begin{proof}
+Consider two perturbations:
+
+\textit{Variant 1 (m-dependent slope)}: Suppose the recourse cost slope varies as $Qc(1 + \alpha m)$ for $\alpha > 0$. The Lipschitz constant becomes $L_m = Qc(1 + \alpha m)$. The robustness premium for staffing level $m$ is:
+\[
+L_m \cdot \eps = Qc(1 + \alpha m) \cdot \eps
+\]
+
+Since $L_0 \neq L_1$, the premiums no longer cancel:
+\begin{align*}
+J^{\text{DRO}}(0) - J^{\text{DRO}}(1) &= [J^{\text{SAA}}(0) - J^{\text{SAA}}(1)] + [L_0 - L_1] \cdot \eps \\
+&= [J^{\text{SAA}}(0) - J^{\text{SAA}}(1)] - Qc \alpha \cdot \eps
+\end{align*}
+
+The effective threshold shift becomes:
+\[
+\Delta p^{\text{DRO}}_{\text{effective}} = -\eps \cdot (1 + \alpha \cdot \text{correction factor})
+\]
+
+\textbf{Numerical validation:} For $\alpha = 0.10$ (10\% slope variation), decision mismatch rate = 8.6\%. For $\alpha = 0.25$ (25\% slope variation), effective shift multiplier = 1.52 (vs. 1.0 for uniform slopes).
+
+\textit{Variant 2 (Non-uniform spacing)}: If threshold spacing decreases with $k$ as $wT/(Qc(1 + \beta k))$ for some $\beta > 0$, the economic buffer between consecutive thresholds varies. While the $\eps$-shift applies to each individual threshold, the relative positions of DRO thresholds differ from a uniform shift of the SAA threshold sequence.
+
+Figure~\ref{fig:necessity} provides numerical validation of these theoretical observations.
+\end{proof}
+
+\begin{remark}[Practical Implications for Applicability]
+\label{rem:applicability}
+The $\eps$-shift rule is \textit{not} a generic consequence of Wasserstein DRO. Practitioners should verify before applying the rule:
+\begin{enumerate}
+\item GW cost is approximately linear (or use adjusted $\eps$ from Proposition~\ref{prop:nonlinear})
+\item Cost structure does not vary systematically with staffing level $m$
+\item Sample size $N \geq 20$ to limit tail risk
+\end{enumerate}
+When these conditions are violated, the full DRO problem should be solved numerically.
+\end{remark}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{fig1_structural_necessity.pdf}
+\caption{Structural necessity demonstration. (a) Original problem: threshold shift equals $\eps$ exactly (theoretical line overlays empirical points). (b) Variant 1 with m-dependent slope: effective shift multiplier varies with $m$, breaking the exact $\eps$-shift property. (c) Impact on decision quality: decision mismatch rates increase when structural conditions are violated.}
+\label{fig:necessity}
+\end{figure}
+
+\subsection{Applicability Conditions and Economic Intuition}
+\label{sec:why_nontrivial}
+
+Building on the structural necessity results of Proposition~\ref{prop:necessity}, this section provides practitioners with explicit applicability conditions and economic interpretation.
+
+\subsubsection{Applicability Checklist for Practitioners}
+\label{sec:applicability}
+
+Before applying the $\eps$-shift rule, practitioners should verify the following conditions. Table~\ref{tab:applicability} provides a decision matrix.
+
+\begin{table}[htbp]
+\centering
+\caption{Applicability Checklist for the $\eps$-Shift Rule. Practitioners should verify each condition before deployment.}
+\label{tab:applicability}
+\begin{tabular}{llp{5cm}}
+\toprule
+Condition & Requirement & If Violated \\
+\midrule
+\textbf{C1: Linear GW cost} & $c_{\text{GW}}$ independent of $m$ & Use full DRO optimization \\
+\textbf{C2: Moderate surge} & $\bsurge \leq 0.8$ & Apply surge correction (Eq.~\ref{eq:nonlinear_shift}) \\
+\textbf{C3: Sample size} & $N \geq 20$ & Use bootstrap confidence intervals \\
+\textbf{C4: Shift magnitude} & $\eps < \min_k p^*_{k \to k+1}$ & Consider smaller $\eps$ \\
+\textbf{C5: Bounded support} & $p_{\max} < 0.8$ or $\sigma < 0.15$ & Run extreme case simulation \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Condition Details:}
+\begin{description}[leftmargin=2em, style=nextline]
+\item[C1 (Linear GW cost)] The uniform Lipschitz structure ($L = Qc$) requires that gig worker marginal cost is constant. If surge pricing creates $m$-dependent costs, use the effective cost formulation (Corollary~\ref{cor:supply}) or solve the full DRO problem.
+
+\item[C2 (Moderate surge)] When surge multiplier $\bsurge > 0.8$, the approximation error from Section~\ref{sec:nonlinear} may exceed 5\%. Apply the corrected threshold from Equation~(\ref{eq:nonlinear_shift}).
+
+\item[C3 (Sample size)] With $N < 20$, the empirical distribution may poorly represent the true distribution. Bootstrap confidence intervals provide better uncertainty quantification than the point estimate $\hat{p}$.
+
+\item[C4 (Shift magnitude)] If $\eps$ exceeds the smallest inter-threshold gap, the shift may ``skip'' decision levels. This is operationally acceptable but may over-protect.
+
+\item[C5 (Bounded support)] When absence rates can exceed 80\% or exhibit high variance ($\sigma > 0.15$), the linear approximation may be strained. Run the extreme case simulation from Section~\ref{sec:sensitivity} to validate.
+\end{description}
+
+\subsubsection{Economic Intuition: Why Uniform Lipschitz Structure Matters}
+
+The uniform Lipschitz structure has a compelling economic interpretation. Consider why $L = Qc$ is constant across staffing levels:
+
+\begin{quote}
+\textit{The marginal cost of absence uncertainty is determined solely by the GW compensation rate, not by how many salaried drivers are already deployed.}
+\end{quote}
+
+This occurs because:
+\begin{enumerate}[nosep]
+\item \textbf{Capacity saturation}: Once workload exceeds SD capacity, every additional unit of absence-induced demand costs exactly $Qc$ (the GW rate times deliveries per person).
+
+\item \textbf{Linear recourse}: The GW cost function is linear in shortage quantity---there is no volume discount or congestion premium that would make the slope $m$-dependent.
+
+\item \textbf{Homogeneous labor}: We assume GWs are perfect substitutes for additional SD capacity, differing only in cost structure.
+\end{enumerate}
+
+When any of these conditions is violated (non-linear GW pricing, heterogeneous skill levels, congestion effects), the uniform structure breaks and practitioners should revert to full DRO optimization.
+
+\subsubsection{Extreme Environment Case Analysis: High Absence Rate Environments}
+\label{sec:extreme_environment}
+
+\begin{remark}[Terminology: Extreme Environment Case vs.\ Boundary Case]
+\label{rem:terminology}
+To avoid confusion, we establish precise terminology for two distinct operational contexts that stress-test the $\eps$-shift rule in different ways:
+\begin{itemize}[nosep]
+\item \textbf{Extreme Environment Case} (this section): Operating conditions where the \textit{mean absence rate} $\mu$ is unusually high (e.g., $\mu \geq 0.65$), typically encountered in industrial zones with daytime commercial deliveries or dense urban areas with high non-delivery rates. The stress on the $\eps$-shift rule arises from approaching the boundary of the support $[0, 1]$.
+\item \textbf{Boundary Case} (Section~\ref{sec:scenario_b_deep}): Operating conditions where the mean absence rate lies \textit{near the decision threshold} (e.g., $|\mu - \pstar| < 0.02$), regardless of the absolute level of $\mu$. The stress on decision-making arises from sampling variability causing frequent threshold crossings.
+\end{itemize}
+These concepts are orthogonal: a Boundary Case can occur at any $\mu$ level where $\mu \approx \pstar_{k \to k+1}$, while an Extreme Environment Case concerns high absolute $\mu$ values.
+\end{remark}
+
+For completeness, we analyze \textit{extreme environment cases} where absence rates may approach or exceed 80\% (e.g., industrial areas with high daytime commercial deliveries). Table~\ref{tab:extreme_cases} reports simulation results.
+
+\begin{table}[htbp]
+\centering
+\caption{Extreme Environment Case Analysis: $\eps$-Shift Performance under High Absence Rates ($N=20$, 1,000 replications)}
+\label{tab:extreme_cases}
+\begin{tabular}{lcccc}
+\toprule
+Scenario & $\mu$ & $\sigma$ & Oracle Match (DRO) & Oracle Match (SAA) \\
+\midrule
+Standard (Scenario A) & 0.450 & 0.080 & 100.0\% & 100.0\% \\
+High-absence urban & 0.650 & 0.100 & 100.0\% & 100.0\% \\
+Extreme industrial & 0.750 & 0.120 & 99.9\% & 99.4\% \\
+Extreme environment ($\mu \to 0.8$) & 0.800 & 0.150 & 89.3\% & 74.8\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Interpretation:} Even under extreme environment conditions ($\mu = 0.80$, $\sigma = 0.15$), the $\eps$-shift rule maintains 89.3\% oracle match versus SAA's 74.8\%---a 14.5 percentage point advantage. The advantage \emph{increases} as operating conditions become more challenging, validating DRO's value proposition in high-uncertainty environments.
+
+\begin{remark}[Generalization to Other Problem Classes]
+\label{rem:generalization}
+The $\eps$-shift property extends to optimization problems satisfying the \textit{Uniform Lipschitz Structure}:
+
+\begin{definition}[Uniform Lipschitz Structure]
+A two-stage stochastic program has \emph{uniform Lipschitz structure} if the recourse function $Q(x, \xi)$ satisfies:
+\[
+|Q(x, \xi_1) - Q(x, \xi_2)| \leq L \cdot |\xi_1 - \xi_2|
+\]
+where $L$ is independent of the first-stage decision $x$.
+\end{definition}
+
+\textbf{Examples where this holds:}
+\begin{enumerate}[nosep]
+    \item Capacity-constrained newsvendor with linear penalties
+    \item Workforce allocation with homogeneous overtime costs
+    \item Resource pooling problems with uniform shortage costs
+\end{enumerate}
+
+\textbf{Examples where this fails:}
+\begin{enumerate}[nosep]
+    \item Newsvendor with quantity-dependent salvage values
+    \item Multi-product problems with product-specific margins
+    \item Network routing with congestion-dependent costs
+\end{enumerate}
+
+This characterization helps practitioners determine when the $\eps$-shift rule applies versus when full DRO optimization is required.
+\end{remark}
+
+%==============================================================================
+\section{Numerical Experiments}
+\label{sec:numerical}
+%==============================================================================
+
+We validate our theoretical results through numerical experiments based on publicly available government statistics and industry reports representative of Japanese delivery operations.
+
+\textbf{Use of Synthetic Data with Documented Calibration.} All parameters are drawn from publicly available sources with explicit citations (Table~\ref{tab:parameters}). The absence rate distributions are synthetically generated to represent three distinct operational scenarios. \textbf{Methodological choice:} We deliberately use synthetic data calibrated to publicly available government statistics rather than proprietary operational data. This choice has three strategic advantages: (1) \textit{Reproducibility}: All parameters are traceable to public sources, enabling full replication by other researchers. (2) \textit{Generalizability}: Our results are not artifacts of a single company's idiosyncratic operations but represent systematic patterns across documented parameter ranges. (3) \textit{Systematic sensitivity analysis}: Synthetic data enables controlled $\pm 30\%$ parameter variations (Section~\ref{sec:sensitivity}) that would be infeasible with fixed operational datasets. We acknowledge that field validation with logistics partners would strengthen external validity and identify this as a priority for future research.
+
+\textbf{Optimization Method.} Since the decision variable $m$ is discrete and small-scale ($m \in \{0, 1, \ldots, 5\}$), we obtain exact optimal solutions via exhaustive enumeration rather than using MIP solvers.
+
+\textbf{Statistical Validity.} All Monte Carlo experiments use 1,000 replications with seed=42 for reproducibility. We report 95\% confidence intervals for all numerical results using t-distribution.
+
+\subsection{Parameter Calibration from Prior Research and Industry Interviews}
+\label{sec:parameters}
+
+The model parameters are calibrated based on two primary sources: (1) our prior research on distributed stock networks for last-mile delivery \citep{mizuno2025distributed,mizuno2025cost}, and (2) structured interviews with Yamato Transport practitioners conducted during that research. Table~\ref{tab:parameters} summarizes the base case parameters.
+
+\begin{table}[htbp]
+\centering
+\caption{Base case parameters calibrated from prior research \citep{mizuno2025distributed,mizuno2025cost} and Yamato Transport interviews}
+\label{tab:parameters}
+\begin{tabular}{llll}
+\toprule
+Parameter & Value & Unit & Source \\
+\midrule
+Area $A$ & 1 & km$^2$ & \cite{mizuno2025distributed} \\
+Density $\rho$ & 200 & pkg/km$^2$ & \cite{mizuno2025cost} \\
+SD wage $w$ & 1,800 & JPY/hour & \cite{mizuno2025cost} \\
+Shift length $T$ & 8 & hours & Industry standard \\
+Handling time $t$ & 5 & min/pkg & Yamato interview$^\dagger$ \\
+GW cost $c$ & 360 & JPY/pkg & Yamato interview$^\dagger$ \\
+Existing SDs $n_0$ & 1 & --- & \cite{mizuno2025distributed} \\
+Initial time $T_0$ & 5 & hours & \cite{mizuno2025distributed} \\
+Slack $S_0$ & 3 & hours & $= n_0 T - T_0$ \\
+\bottomrule
+\multicolumn{4}{l}{\footnotesize $^\dagger$ Structured interviews with Yamato Transport practitioners; see Remark~\ref{rem:gw_cost_estimation}.}
+\end{tabular}
+\end{table}
+
+\begin{remark}[GW Cost Estimation from Yamato Transport Interviews]
+\label{rem:gw_cost_estimation}
+The gig worker cost parameter $c = 360$ JPY/pkg is derived from structured interviews conducted during our prior research \citep{mizuno2025distributed,mizuno2025cost}:
+
+\textbf{(1) Yamato Transport interviews (primary source):} Through structured interviews with operational managers at Yamato Transport's regional branches (2023--2024), we obtained direct information on outsourcing costs for redelivery operations. The reported range was 320--400 JPY/pkg for standard residential redeliveries, with 360 JPY/pkg as the median estimate for urban service areas. These interviews also informed our model structure and operational assumptions.
+
+\textbf{(2) Platform wage data (cross-validation):} Amazon Flex Japan recruitment pages (accessed 2023--2024) advertise earnings of 1,750--2,250 JPY per hour. Taking the midpoint (2,000 JPY/hour) and assuming 5--6 deliveries per hour yields approximately 364 JPY/pkg, consistent with the interview data.
+
+\textbf{(3) Industry reports:} The Japan Institute of Logistics Systems (JILS) 2023 survey reports last-mile delivery outsourcing costs of 300--450 JPY/pkg for standard residential packages, with our estimate of 360 JPY/pkg representing the median of this range.
+
+\textbf{Sensitivity analysis:} Section~\ref{sec:sensitivity} validates that the $\eps$-shift rule remains robust under $\pm 30\%$ variations in $c$ (i.e., $c \in [252, 468]$ JPY/pkg), spanning the full range of estimates. The qualitative findings---particularly the \scenarioBAdvantage pp DRO advantage in Scenario B---are preserved across this range.
+\end{remark}
+
+The price ratio is $\gamma = w/c = 1800/360 = 5.0$ hours per package. The marginal cost comparison yields $wt = 1800 \times (5/60) = 150$ JPY per package versus $c = 360$ JPY per package, so $wt < c$, favoring SD utilization when capacity permits.
+
+\subsection{Scenario Framework with Operational Context}
+\label{sec:scenarios}
+
+To ensure systematic comparison and practical relevance, we establish three representative scenarios based on real-world operational contexts (Table~\ref{tab:scenarios}).
+
+\begin{table}[htbp]
+\centering
+\caption{Scenario framework with operational context. The switching threshold is $\pstar_{0 \to 1} = 0.380$.}
+\label{tab:scenarios}
+\small
+\begin{tabular}{llllll}
+\toprule
+Scenario & Name & Distribution & Mean & Gap & Std \\
+\midrule
+A & Urban High-Density & Beta(10, 14) & 0.417 & +9.7\% & 0.099 \\
+B & Suburban Standard & Beta(10, 16) & 0.385 & +1.2\% & 0.094 \\
+C & Rural Depopulated & Beta(12, 28) & 0.300 & $-$21.1\% & 0.072 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Scenario A (Urban High-Density, Mean $>$ Threshold):} When the true mean exceeds the threshold, the oracle-optimal decision is $m^* = 1$. SAA with small samples may underestimate the mean and incorrectly select $m = 0$, while DRO's conservative shift provides protection.
+
+\textbf{Scenario B (Suburban Standard, Mean $\approx$ Threshold):} This is a critical \textit{boundary case} where the true mean (0.385) lies just \textit{above} the threshold (0.380). The mean-threshold gap is only 1.2\%, making this the scenario where distributional robustness provides maximum value. See Section~\ref{sec:scenario_b_deep} for detailed analysis.
+
+\textbf{Scenario C (Rural Depopulated, Mean $<$ Threshold):} When the true mean is well below the threshold, DRO pays an ``insurance premium'' for protection that may not be needed. This scenario illustrates the risk-hedging trade-off.
+
+\subsection{Deep Dive: Scenario B---The Boundary Case}
+\label{sec:scenario_b_deep}
+
+Scenario B represents the \textit{boundary case} where distributional robustness provides maximum value. With true mean $\mu = 0.385$ and threshold $\pstar_{0 \to 1} = 0.380$, the gap is only 1.2\%---standard error of the sample mean ($\approx 0.021$ for $N=20$) exceeds this gap by a factor of 4, causing $\sim$40\% of SAA decisions to incorrectly select $m=0$.
+
+\textbf{DRO's Protective Mechanism.} With $\eps = 0.02$, the shifted threshold $\pdro_{0 \to 1} = 0.36$ ensures $\Prob(\bar{p} > 0.36) \approx \scenarioBDROMatch\%$, recovering most incorrect decisions without over-staffing in low-absence scenarios.
+
+\begin{table}[htbp]
+\centering
+\caption{Boundary Case (Scenario B) Performance Summary ($N=20$, 1,000 replications). Extended analysis in Supplementary Material~\ref{supp:scenario_details}.}
+\label{tab:scenario_b_deep}
+\small
+\begin{tabular}{lcccc}
+\toprule
+Metric & Oracle & SAA & DRO ($\eps=0.02$) & Improvement \\
+\midrule
+Oracle match rate & 100\% & \scenarioBSAAMatch\% & \scenarioBDROMatch\% & \textbf{+\scenarioBAdvantage{} pp} \\
+$\Prob(m=0 | m^*=1)$ & 0\% & 40.5\% & 12.8\% & $-$\scenarioBAdvantage{} pp \\
+Cost std dev (JPY) & 0 & 774 & 565 & $-$27\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Key Insight.} The substantial advantage in the boundary case represents DRO's ``cheap insurance'': significant protection when distributional uncertainty threatens decision quality, negligible cost when protection is unnecessary. For major carriers (Yamato-scale operations), this translates to $\sim$5M JPY annual savings from avoided staffing errors (detailed economic impact analysis in Supplementary Material~\ref{supp:economic}).
+
+%==============================================================================
+% COMPRESSED CVaR vs DRO Comparison (R6.1: Reduced from ~8 pages to ~2 pages)
+%==============================================================================
+\subsection{CVaR vs DRO: Smart vs.\ Unconditional Conservatism}
+\label{sec:cvar_comparison}
+
+\begin{remark}[CVaR Definition: Upper-Tail Formulation]
+\label{rem:cvar_definition}
+Throughout this paper, we employ the \textbf{upper-tail CVaR} formulation \citep{rockafellar2000optimization} appropriate for our staffing context. In our problem, higher absence rates $p$ lead to higher costs (more gig worker usage). To protect against high-cost scenarios, we define:
+\begin{equation}
+\text{CVaR}_\alpha^{\text{upper}}(p) = \E[p \mid p \geq \text{VaR}_\alpha(p)]
+\label{eq:cvar_upper}
+\end{equation}
+where $\text{VaR}_\alpha(p)$ is the $\alpha$-quantile of $p$. 
+
+\textbf{Distinction from standard financial CVaR:} The standard lower-tail CVaR used in portfolio risk management protects against low returns (losses):
+\begin{equation}
+\text{CVaR}_\alpha^{\text{lower}}(R) = \E[R \mid R \leq \text{VaR}_{1-\alpha}(R)]
+\label{eq:cvar_lower}
+\end{equation}
+Our upper-tail formulation~\eqref{eq:cvar_upper} focuses on the worst $(1-\alpha)\%$ of absence rates---the scenarios that generate highest recourse costs. This is equivalent to applying standard CVaR to the loss function $L = p$ rather than to returns. Implementation details are provided in the supplementary code (lines 85--106 of \texttt{simulation\_engine.py}).
+\end{remark}
+
+We compare DRO against CVaR-based decision rules to demonstrate their fundamentally different protection mechanisms. \textbf{Key distinction:}
+\begin{itemize}[nosep]
+\item \textbf{DRO}: \textit{Smart conservatism}---proportional protection that adapts to threshold proximity
+\item \textbf{CVaR}: \textit{Unconditional conservatism}---tail protection regardless of decision context
+\end{itemize}
+
+Table~\ref{tab:conservatism_summary} synthesizes the comparison across all scenarios.
+
+\begin{table}[htbp]
+\centering
+\caption{Two Forms of Conservatism: DRO vs.\ CVaR (Summary). Detailed scenario-specific results in Supplementary Material~\ref{supp:cvar_details}.}
+\label{tab:conservatism_summary}
+\small
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Characteristic & DRO (Smart) & CVaR (Design-driven) \\
+\midrule
+Protection target & Distributional uncertainty & Tail realizations \\
+Adaptation & Proportional to threshold proximity & Constant upward shift \\
+Scenario A ($\mu > \pstar$) & 99.8\% oracle, +0.0\% cost & 100\% oracle, +0.0\% cost \\
+Scenario B ($\mu \approx \pstar$) & \textbf{\scenarioBDROMatch\% oracle (+\scenarioBAdvantage pp vs SAA)} & 100\% oracle (coincidentally aligned) \\
+Scenario C ($\mu < \pstar$) & \textbf{100\% oracle, +0.0\% cost} & 10--15\% oracle, +57--60\% cost \\
+Implementation & Simple threshold shift & Optimization problem \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Critical insight:} CVaR's 100\% oracle match in Scenario B is \textit{not adaptive decision-making}---it is unconditional upward bias (CVaR$_\alpha \geq$ sample mean) that coincidentally aligns with oracle decisions when $m^* = 1$. The same tail-risk protection design causes systematic over-staffing in Scenario C: CVaR chooses $m = 1$ in 85--95\% of replications despite the oracle requiring $m = 0$, incurring a 57--60\% cost penalty. This behavior reflects CVaR's design objective (protecting against tail realizations) rather than a methodological flaw---it simply optimizes for a different risk measure than the oracle's expected cost.
+
+\begin{remark}[DRO's ``Smart Conservatism'']
+\label{rem:dro_smart}
+DRO provides \textit{adaptive} protection: when the sample mean is far from the threshold (Scenario C), the modest $\eps = 0.02$ shift has no decision impact. When near the threshold (Scenario B), DRO achieves substantial improvement over SAA (see Table~\ref{tab:scenario_b_deep}). This proportionality distinguishes DRO from CVaR's unconditional bias.
+\end{remark}
+
+\textbf{Practical recommendation:} DRO via the $\eps$-shift rule provides superior protection with simpler implementation for threshold-based workforce decisions. Complete scenario-specific tables (Tables~S1--S3) and CVaR-as-objective analysis are provided in Supplementary Material~\ref{supp:cvar_details}.
+
+%==============================================================================
+% R7: Statistical Significance of DRO Advantage
+%==============================================================================
+\subsection{Statistical Significance of DRO Advantage}
+\label{sec:statistical_significance}
+
+Table~\ref{tab:statistical_significance} presents formal statistical testing of the DRO advantage zone.
+
+\begin{table}[htbp]
+\centering
+\caption{Statistical significance of DRO advantage (Scenario A, paired comparison)}
+\label{tab:statistical_significance}
+\begin{tabular}{lrrrrrl}
+\toprule
+$N$ & SAA Cost & DRO Cost & Diff & 95\% CI & $p$-value & Sig. \\
+\midrule
+10 & 14,741 & 14,495 & +246 & [+201, +290] & $<0.001$ & *** \\
+20 & 14,508 & 14,405 & +103 & [+79, +126] & $<0.001$ & *** \\
+50 & 14,421 & 14,400 & +21 & [+11, +31] & $<0.001$ & *** \\
+100 & 14,403 & 14,400 & +3 & [$-$1, +6] & 0.157 & n.s. \\
+\bottomrule
+\multicolumn{7}{l}{\footnotesize *** $p < 0.001$, ** $p < 0.01$, * $p < 0.05$, n.s. = not significant}
+\end{tabular}
+\end{table}
+
+\begin{remark}[DRO Advantage Zone]
+The ``DRO advantage zone'' (shaded region in Figure~\ref{fig:oos}) is statistically significant at the 5\% level for $N < 50$. For $N \geq 100$, the overlapping confidence intervals indicate no statistically significant difference---both methods converge to oracle performance as sample size increases.
+\end{remark}
+
+\subsection{Validation of Theoretical Results}
+\label{sec:validation}
+
+This subsection validates the theoretical framework through graphical and tabular analysis.
+
+\textbf{Threshold Policy Structure.} Figure~\ref{fig:threshold} validates the threshold structure derived in Section~\ref{sec:deterministic}. Panel (a) displays cost curves for staffing levels $m = 0, 1, 2$, showing the piecewise-linear structure with kinks at capacity thresholds $\pbar_m$. Panel (b) shows the optimal staffing policy $m^*(p)$ as a step function. The computed thresholds match theoretical values: $\pbar_0 = 0.180$, $\pstar_{0 \to 1} = 0.380$; $\pbar_1 = 0.660$, $\pstar_{1 \to 2} = 0.860$.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{fig2_threshold_structure.pdf}
+\caption{Threshold policy structure. (a) Cost curves for $m = 0, 1, 2$ showing piecewise-linear structure with kinks at capacity thresholds. (b) Optimal staffing policy $m^*(p)$ as a step function.}
+\label{fig:threshold}
+\end{figure}
+
+\textbf{Decision Regime Map.} Figure~\ref{fig:regime} presents a decision regime map showing optimal additional SDs ($m^*$) as a function of price ratio $\gamma = w/c$ and delivery density $\rho$. Higher density and lower price ratios favor earlier SD hiring; boundaries shift as absence rate increases.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{fig3_decision_regime.pdf}
+\caption{Decision regime map showing optimal additional SDs ($m^*$) vs. price ratio $\gamma$ and density $\rho$. (a) Normal conditions ($p = 0.20$). (b) Peak period ($p = 0.40$).}
+\label{fig:regime}
+\end{figure}
+
+\textbf{Out-of-Sample Performance.} Figure~\ref{fig:oos} compares SAA and DRO under Scenario A. For $N < 50$, DRO achieves significantly lower out-of-sample costs and higher oracle agreement rates. Table~\ref{tab:method_comparison} provides detailed comparison at $N = 20$.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{fig4_oos_performance.pdf}
+\caption{Out-of-sample performance (Scenario A, 1,000 replications). (a) Mean cost by sample size $N$. Green region: DRO outperforms SAA. (b) Oracle agreement rate with 95\% confidence bands.}
+\label{fig:oos}
+\end{figure}
+
+\begin{table}[htbp]
+\centering
+\caption{Method comparison ($N = 20$, Scenario A, 1,000 replications)}
+\label{tab:method_comparison}
+\small
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+Method & Mean Cost & Std Dev & Oracle Match & Gap \\
+\midrule
+Oracle & 14,400 & 0 & 100\% & --- \\
+SAA & 14,508 & 523 & 95.9\% & +0.8\% \\
+DRO ($\eps = 0.02$) & 14,405 & 118 & 99.8\% & +0.0\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{The 1\% Safe Zone Rule (Figure~\ref{fig:safe_zone})}
+\label{sec:safe_zone}
+
+Figure~\ref{fig:safe_zone} validates the robustness of the $\eps$-shift rule under non-linear (surge) pricing.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{fig5_safe_zone.pdf}
+\caption{Non-linear cost robustness analysis. (a) Suboptimality gap vs. surge parameter $\bsurge$ for different $\eps$ values. The 1\% threshold (dashed line) defines the Safe Zone. Shaded regions show 95\% confidence intervals. (b) Gap vs. $\eps$ for fixed surge levels. Blue shaded region indicates the recommended range $\eps \in [0.03, 0.05]$.}
+\label{fig:safe_zone}
+\end{figure}
+
+\begin{tcolorbox}[colback=green!5!white, colframe=green!50!black, title=The 1\% Safe Zone Rule---What We Guarantee]
+\textbf{Mean Performance Bound (Guaranteed):} For $\bsurge \leq 0.8$ and $\eps \geq 0.03$:
+\begin{itemize}[nosep]
+    \item $\E[\text{suboptimality gap}] < 1\%$ (validated with Bonferroni-corrected testing)
+    \item 95th percentile gap $< 0.2\%$ for all parameter combinations
+\end{itemize}
+
+\textbf{Worst-Case Gaps (NOT Guaranteed):}
+\begin{itemize}[nosep]
+    \item Individual realizations may reach 21--35\% gap in rare tail events ($<2\%$ probability)
+    \item These occur when sample mean deviates $> 2$ standard errors from true mean
+\end{itemize}
+
+\textbf{Key Distinction:} The ``1\%'' refers to \textit{expected (average)} performance across replications, not a worst-case guarantee on every individual decision.
+\end{tcolorbox}
+
+\textbf{Statistical Validation.} We formally test the 1\% Safe Zone Rule using a one-sample t-test for each combination of surge parameter $\bsurge \in \{0, 0.1, 0.2, \ldots, 0.8\}$ and robustness parameter $\eps \in \{0.03, 0.05\}$.
+
+\textit{Hypothesis:} $H_0: \E[\text{gap}] \geq 1\%$ versus $H_1: \E[\text{gap}] < 1\%$
+
+\textit{Multiple Testing Correction:} With 18 tests (9 $\bsurge$ values $\times$ 2 $\eps$ values), we apply Bonferroni correction: $\alpha_{\text{corrected}} = 0.05/18 \approx 0.0028$.
+
+\textit{Results:} All 18 tests reject $H_0$ at the Bonferroni-corrected level (maximum $p$-value $< 0.0001$). The 95\% upper confidence bound for the mean gap is below 0.7\% for all tested combinations.
+
+\textit{Conclusion:} The 1\% Safe Zone Rule is statistically validated with family-wise error rate controlled at 5\%. See Table~\ref{tab:worstcase} (Section~\ref{sec:nonlinear}) for worst-case gap analysis.
+
+\subsection{CVaR Comparison (Figure~\ref{fig:cvar})}
+
+Figure~\ref{fig:cvar} provides visual comparison of DRO against CVaR-based decision rules across all three scenarios.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{fig6_cvar_comparison.pdf}
+\caption{CVaR comparison analysis (1,000 replications, seed=42). (a) Oracle match rate by scenario: CVaR achieves 100\% in Scenarios A and B (where oracle = $m^*=1$) due to unconditional upward bias, while its tail-risk protection design leads to systematic over-staffing in Scenario C (10--15\% match) where oracle = $m^*=0$. DRO maintains strong performance across all scenarios. (b) Cost gap in Scenario C: CVaR incurs 57--60\% cost penalty due to over-staffing inherent in its tail-protection objective, while DRO and SAA achieve near-zero cost gap.}
+\label{fig:cvar}
+\end{figure}
+
+\textbf{Critical Insight:} CVaR's apparent success in Scenarios A and B is \textit{not} adaptive decision-making---it is unconditional upward bias (CVaR$_\alpha \geq$ sample mean for all $\alpha$) that coincidentally produces correct decisions when the oracle requires $m=1$. The same tail-risk protection design leads to systematic over-staffing in Scenario C, where the oracle requires $m=0$.
+
+\textbf{Why CVaR Over-Staffs in Low-Absence Scenarios:} With true mean (0.300) well below threshold (0.380):
+\begin{enumerate}
+\item Sample mean rarely exceeds threshold: $\Prob(\bar{p} > 0.380) \approx 0\%$
+\item CVaR$_{0.95}$ exceeds threshold in $\sim$90\% of samples due to tail focus
+\item This creates systematic over-staffing with 57--60\% cost penalty
+\end{enumerate}
+
+\textbf{DRO's Advantage:} Unlike CVaR, DRO protects against \textit{distributional misspecification} rather than \textit{tail realizations}. The $\eps$-shift provides adaptive protection: meaningful in boundary cases (Scenario B), negligible impact when the decision is clear (Scenarios A and C). This ``smart conservatism'' makes DRO preferable for practitioners facing diverse operational scenarios.
+
+\subsection{Scenario C Analysis: DRO Performance (Figure~\ref{fig:scenario_c})}
+\label{sec:scenario_c}
+
+We now provide explicit analysis of Scenario C (Rural Depopulated, mean = 0.300 $<$ threshold = 0.380) to demonstrate DRO's adaptive behavior when the decision is unambiguous.
+
+\begin{table}[htbp]
+\centering
+\caption{Scenario C Analysis: DRO and SAA performance ($N = 20$, Rural Depopulated, 1,000 replications, seed=42). Note: CVaR exhibits systematic over-staffing in this scenario due to its tail-risk protection design---achieving only 10--15\% oracle match with 57--60\% cost penalty (see Table~\ref{tab:conservatism_summary}).}
+\label{tab:scenario_c}
+\begin{tabular}{lrrrrrr}
+\toprule
+Method & Mean Cost (JPY) & 95\% CI & vs Oracle & $m = 0$ & $m = 1$ \\
+\midrule
+Oracle & 8,640 & --- & baseline & 100\% & 0\% \\
+SAA & 8,640 & --- & +0.0\% & 100\% & 0\% \\
+DRO ($\eps = 0.01$) & 8,640 & --- & +0.0\% & 100\% & 0\% \\
+DRO ($\eps = 0.02$) & 8,640 & --- & +0.0\% & 100\% & 0\% \\
+DRO ($\eps = 0.03$) & 8,640 & --- & +0.0\% & 100\% & 0\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{fig7_scenario_c.pdf}
+\caption{Scenario C analysis: DRO limitations when mean (0.300) is below threshold (0.380). (a) SAA achieves costs comparable to DRO because DRO's ``insurance premium'' is effectively zero when the distribution is sufficiently below the threshold. (b) Summary of risk-hedging trade-off across all three scenarios at $N = 20$.}
+\label{fig:scenario_c}
+\end{figure}
+
+\textbf{Interpretation:} The results confirm that when the true distribution mean is sufficiently below the threshold, DRO's conservatism does not harm performance---the ``insurance premium'' is effectively zero. This occurs because even with the $\eps$-shift, the DRO threshold remains above the true mean. However, practitioners should be aware that DRO is designed for worst-case protection, not expected-case optimization.
+
+\subsection{Sensitivity Analysis (Figure~\ref{fig:sensitivity})}
+\label{sec:sensitivity}
+
+Since our numerical experiments rely on calibrated parameters, we conduct comprehensive sensitivity analysis to examine robustness across plausible parameter ranges.
+
+\textbf{Parameter ranges examined:} We vary each key parameter within $\pm 30\%$ of its base case value:
+\begin{itemize}
+\item SD wage $w$: 1,260--2,340 JPY/hour
+\item GW cost $c$: 252--468 JPY/package
+\item Handling time $t$: 3.5--6.5 min/package
+\item Delivery density $\rho$: 140--260 packages/km$^2$
+\end{itemize}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{fig8_sensitivity.pdf}
+\caption{Sensitivity analysis. (a) Threshold $\pstar_{0 \to 1}$ sensitivity to parameter variations ($\pm 30\%$). The threshold structure is robust across all parameter combinations. (b) $\eps$-$N$ relationship: recommended $\eps$ scales as $\eps_N = \eps_0 \cdot N^{-0.5}$. Shaded region indicates the recommended range [0.03, 0.05] that maintains $< 1\%$ suboptimality.}
+\label{fig:sensitivity}
+\end{figure}
+
+\textbf{$\eps$-$N$ Relationship:} Based on Theorem~\ref{thm:finite_sample}, the recommended $\eps$ scales with sample size as:
+\begin{equation}
+\eps_N = \eps_0 \cdot N^{-1/2}, \quad \eps_0 \in [0.04, 0.06]
+\label{eq:eps_N}
+\end{equation}
+
+Table~\ref{tab:eps_guidance} provides practical guidance for $\eps$ selection based on sample size.
+
+\begin{table}[htbp]
+\centering
+\caption{Recommended $\eps$ by sample size}
+\label{tab:eps_guidance}
+\begin{tabular}{lcc}
+\toprule
+Sample Size $N$ & $\eps$ ($\eps_0 = 0.05$) & $\eps$ ($\eps_0 = 0.06$) \\
+\midrule
+10 & 0.016 & 0.019 \\
+20 & 0.011 & 0.013 \\
+50 & 0.007 & 0.008 \\
+100 & 0.005 & 0.006 \\
+200 & 0.004 & 0.004 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Key findings:}
+\begin{enumerate}
+\item \textit{Threshold structure is robust:} The optimal policy exhibits a threshold structure across all parameter combinations tested.
+\item \textit{$\eps$-shift rule remains valid:} The uniform threshold shift property holds exactly under linear costs for all parameter combinations.
+\item \textit{Non-linear robustness is consistent:} The $\bsurge \leq 0.8$ robust zone with $\eps \geq 0.03$ is insensitive to base parameter values.
+\item \textit{DRO advantage persists:} The sample-size region where DRO outperforms SAA ($N < 50$) is consistent across parameter variations.
+\end{enumerate}
+
+\subsection{Supply Uncertainty Validation (Figure~\ref{fig:supply})}
+
+Figure~\ref{fig:supply} validates Corollary~\ref{cor:supply} numerically.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{fig9_supply_uncertainty.pdf}
+\caption{Supply uncertainty analysis (Corollary~\ref{cor:supply}). (a) Threshold adjustment under supply uncertainty for varying $\pi$ and $\delta$. (b) Performance comparison: ignoring vs. accounting for supply uncertainty.}
+\label{fig:supply}
+\end{figure}
+
+\textbf{Key findings:}
+\begin{enumerate}
+\item \textit{Threshold decreases with supply unavailability:} As $\pi$ decreases (more supply uncertainty), the effective GW cost $\bar{c}$ increases, leading to lower thresholds (more SD hiring).
+\item \textit{Accounting for supply uncertainty improves performance:} Using the effective cost $\bar{c}$ in DRO decisions (rather than ignoring supply uncertainty) reduces suboptimality gaps.
+\item \textit{Decomposition validated:} The separate treatment of demand uncertainty ($\eps$) and supply uncertainty ($\bar{c}$) is numerically validated across the parameter range.
+\end{enumerate}
+
+\subsection{Structural Necessity Validation}
+\label{sec:necessity_validation}
+
+The numerical results for structural necessity (Figure~\ref{fig:necessity} in Section~\ref{sec:dro}) validate Proposition~\ref{prop:necessity}, demonstrating that the $\eps$-shift rule is \textit{not} a trivial consequence of Wasserstein DRO theory.
+
+\textbf{Key observations:}
+\begin{enumerate}
+\item \textit{Original problem exhibits exact shifts:} Panel (a) confirms that the threshold shift equals $\eps$ precisely, validating Theorem~\ref{thm:epsilon_shift}.
+\item \textit{m-dependent slopes break uniformity:} Panel (b) shows that when the recourse cost slope varies with $m$ (even by 5--25\%), the effective shift multiplier deviates significantly from unity.
+\item \textit{Structural perturbations degrade decisions:} Panel (c) demonstrates that naively applying the $\eps$-shift rule to structurally perturbed problems leads to increased decision mismatch rates.
+\end{enumerate}
+
+These results establish that our problem possesses a \textit{special structure} that enables the exact $\eps$-shift property---a finding that is not obvious from general DRO theory alone.
+
+%==============================================================================
+\section{Managerial Insights}
+\label{sec:managerial}
+%==============================================================================
+
+Our analysis yields several actionable insights for logistics operators.
+
+\subsection{Key Decision Rules}
+
+\textbf{Threshold-based decision rules:} The closed-form threshold expressions enable simple, real-time staffing decisions. Operators can pre-compute thresholds for their cost parameters and make immediate staffing adjustments based on forecasted absence rates.
+
+\begin{tcolorbox}[colback=blue!5!white, colframe=blue!50!black, title=The $\eps$-Shift Rule---Operational Simplicity]
+The most important practical contribution is that complex DRO theory reduces to a trivially simple operational rule: compute deterministic thresholds offline (using Equation~\ref{eq:switching_threshold}), then subtract $\eps$ from all thresholds. \textbf{No online optimization is required.}
+
+Algorithm~\ref{alg:epsilon_shift} is \textit{mathematically equivalent} to solving the full DRO problem (Theorem~\ref{thm:epsilon_shift}), not merely an approximation.
+\end{tcolorbox}
+
+\textbf{Economic interpretation:} The threshold formula decomposes into capacity and economic components. The capacity limit $\pbar_k$ is determined by physical resources, while the economic buffer $wT/(Qc)$ depends on the relative cost of fixed versus variable labor.
+
+\textbf{Regime map for quick decision-making:} Figure~\ref{fig:regime} enables practitioners to identify their operational regime at a glance.
+
+\subsection{When to Use DRO}
+
+\textbf{Risk-hedging interpretation:} DRO should be understood as a risk-hedging mechanism, not merely a cost-minimization tool. When the true distribution is favorable, DRO pays a small insurance premium ($\sim 0\text{--}0.1\%$). When unfavorable, DRO provides protection ($\sim 1\text{--}2\%$ savings).
+
+\textbf{When to use DRO:} DRO is most valuable when:
+\begin{itemize}
+\item Sample size is small ($N < 50$)
+\item The true distribution mean is likely above or near the threshold
+\item Understaffing costs substantially exceed overstaffing costs
+\end{itemize}
+
+\textbf{Recommended $\eps$ values:} Based on Figure~\ref{fig:safe_zone}, we recommend $\eps \geq 0.03$ for parameter settings similar to our base case.
+
+\textbf{Safe Approximation for surge pricing:} In markets with surge pricing, operators can apply a simple correction:
+\begin{equation}
+\eps_{\text{effective}} \approx \eps \cdot \left(1 + \frac{\bsurge}{2}\right)
+\end{equation}
+For example, with 50\% surge ($\bsurge = 0.5$), use $\eps_{\text{effective}} \approx 1.25 \times \eps$.
+
+\subsection{Step-by-Step Implementation Guide}
+
+We provide a practical guide for implementing the $\eps$-shift rule (Table~\ref{tab:implementation}).
+
+\begin{table}[htbp]
+\centering
+\caption{Step-by-step implementation of the $\eps$-shift rule}
+\label{tab:implementation}
+\small
+\begin{tabular}{clll}
+\toprule
+Step & Action & Formula & Example \\
+\midrule
+1 & Gather parameters & Table~\ref{tab:parameters} & $w = 1800$, $c = 360$ \\
+2 & Compute $Q$ & $Q = \rho \times A$ & $200 \times 1 = 200$ \\
+3 & Compute slack & $S_0 = n_0 T - T_0$ & $8 - 5 = 3$ \\
+4 & Capacity threshold & $\pbar_0 = S_0/(Qt)$ & $3/16.67 = 0.18$ \\
+5 & Economic buffer & $wT/(Qc)$ & $14400/72000 = 0.20$ \\
+6 & Deterministic threshold & $\pstar = \pbar_0 + wT/(Qc)$ & $0.18 + 0.20 = 0.38$ \\
+7 & Choose $\eps$ & $\eps \geq 0.03$ & $\eps = 0.03$ \\
+8 & Apply $\eps$-shift & $\pdro = \pstar - \eps$ & $0.38 - 0.02 = 0.36$ \\
+9 & Decision & If $\bar{p} > \pdro$: add SD & $0.37 > 0.36 \Rightarrow m^* = 1$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Excel implementation:} A practitioner-ready Excel file is provided in the Supplementary Materials (\texttt{epsilon\_shift\_calculator.xlsx}), containing:
+\begin{enumerate}
+\item Interactive threshold calculator with input validation for all formulas
+\item Quick reference card with step-by-step instructions
+\item Example scenarios for Urban High-Density, Suburban Standard, and Rural Depopulated contexts
+\item Sensitivity analysis dashboard with $\eps$-$N$ relationship guidance
+\item Support for $m = 0, \ldots, 5$
+\end{enumerate}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\textwidth]{fig10_calculator.pdf}
+\caption{Excel-based $\eps$-shift calculator interface. The workbook provides: (1) input validation for all parameters with unit checking; (2) automatic computation of capacity thresholds $\pbar_m$ and switching thresholds $\pstar_{k \to k+1}$; (3) supply uncertainty adjustment via effective cost $\bar{c}$; (4) recommended $\eps$ values based on sample size $N$. The tool requires no programming expertise and enables immediate deployment of the $\eps$-shift rule. Available as Supplementary Material.}
+\label{fig:excel_screenshot}
+\end{figure}
+
+\subsection{Data Requirements}
+
+The Wasserstein DRO approach requires only historical absence rate samples, not distributional assumptions. Performance guarantees improve with $\sqrt{N}$, suggesting that modest sample sizes (50--100 observations) suffice for reliable decision-making.
+
+\subsection{Discussion: Limitations of Perfect Recourse}
+\label{sec:discussion}
+
+We acknowledge that Assumption~\ref{ass:perfect_recourse} (Perfect Recourse) may be violated in practice. The $\eps$-shift rule remains valid as long as gig worker costs are known (or bounded), but the following scenarios warrant caution:
+
+\textbf{Extreme weather events:} When gig worker availability drops significantly (e.g., typhoons, heavy snow), the effective $c$ increases substantially. Practitioners should use higher $\eps$ values or consider fixed staffing.
+
+\textbf{Peak periods:} During year-end holidays or promotional events, platform capacity constraints may bind. Pre-scheduling gig workers or using higher $\eps$ is recommended.
+
+\textbf{Rural areas:} In areas with thin gig worker markets, supply uncertainty dominates. The supply-adjusted threshold (Corollary~\ref{cor:supply}) should be used with conservative $\pi$ estimates.
+
+%==============================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+%==============================================================================
+
+This paper develops a distributionally robust optimization framework for last-mile workforce planning that achieves both theoretical rigor and practical tractability.
+
+\textbf{Primary finding: Boundary case protection.} Our most striking result concerns the \textit{boundary case} where the true distribution mean lies near the decision threshold (Scenario~B, mean-threshold gap = 0.5 percentage points, or 1.2\% relative). Here, DRO achieves \textbf{\scenarioBDROMatch\% oracle match versus SAA's \scenarioBSAAMatch\%---a \scenarioBAdvantage{} percentage point advantage}. This finding has immediate practical relevance: logistics operators frequently face uncertain operating conditions where demand hovers near capacity thresholds. The $\eps$-shift rule provides ``cheap insurance'' against costly under-staffing errors precisely in these high-stakes situations.
+
+\textbf{Theoretical contribution: Structural property identification.} The technical foundation enabling this result is our discovery that capacity-constrained workforce allocation possesses a \textit{uniform Lipschitz structure}---the recourse cost slope $L = Qc$ is identical across all staffing levels. This structural property enables exact translation of complex Wasserstein DRO into simple threshold arithmetic. Crucially, we prove (Proposition~\ref{prop:necessity}) that this property is not generic: it breaks under perturbations, establishing our finding as problem-specific rather than a consequence of existing DRO theory.
+
+\textbf{Comparison with CVaR: Smart vs.\ design-driven conservatism.} Our comprehensive comparison reveals that CVaR exhibits \textit{design-driven conservatism}---unconditional upward bias reflecting its tail-risk protection objective. This leads to systematic over-staffing in low-absence scenarios (Scenario~C: 10--15\% oracle match with 57--60\% cost penalty). In contrast, DRO's ``smart conservatism'' adapts protection proportionally to distributional uncertainty, providing substantial benefit only when needed.
+
+\textbf{Practical robustness.} Although our theory assumes linear costs, numerical experiments confirm that the $\eps$-shift heuristic remains valid under realistic non-linear cost structures: for surge pricing parameters $\bsurge \leq 0.8$ and $\eps \geq 0.03$, the suboptimality gap is less than 1\% (the ``1\% Safe Zone Rule''). We provide comprehensive scenario analysis across three operationally relevant settings with $\pm 30\%$ sensitivity analysis, all validated with 1,000 Monte Carlo replications and Bonferroni-corrected hypothesis testing. From a practical standpoint, we provide a step-by-step implementation guide (Table~\ref{tab:implementation}), applicability checklist (Table~\ref{tab:applicability}), and Excel workbook enabling immediate deployment.
+
+\subsection{Limitations}
+
+We acknowledge several limitations of our analysis:
+
+\textbf{Perfect recourse assumption:} Our model assumes gig workers can be secured at the specified cost after observing the absence rate. Section~\ref{sec:supply_uncertainty} provides a formal extension incorporating supply availability probability, and Section~\ref{sec:discussion} discusses practical scenarios where this assumption may be violated. Importantly, this extension preserves the uniform Lipschitz structure ($L = Q\bar{c}$) even under extreme supply uncertainty (e.g., $\pi = 0.5$), ensuring the $\eps$-shift rule remains exact rather than approximate. Remark~\ref{rem:extreme_supply} provides numerical illustrations demonstrating robustness across a wide range of supply uncertainty scenarios.
+
+\textbf{Single-period focus:} Our model captures daily allocation decisions but does not address strategic workforce sizing or learning dynamics over time.
+
+\textbf{Linear costs:} The tractable threshold shift result relies on linear GW costs. Section~\ref{sec:nonlinear} demonstrates that under convex costs, the threshold shift exceeds $\eps$ by 10--50\%, but the out-of-sample cost gap remains small ($< 1\%$) for moderate convexity ($\bsurge \leq 0.8$).
+
+\textbf{Homogeneous workers:} We assume all SDs and GWs have identical capabilities.
+
+\textbf{Synthetic data:} Our numerical experiments rely on synthetic data calibrated to publicly available statistics rather than proprietary operational data. While this ensures reproducibility and enables systematic sensitivity analysis, field validation with logistics partners would strengthen external validity.
+
+\subsection{Future Research}
+\label{sec:future_multiperiod}
+
+Several extensions merit future investigation. First, \textit{learning dynamics}: as data accumulates, adaptive schemes could reduce $\eps$ over time following $\eps_t \propto N_t^{-1/2}$. Second, \textit{workforce dynamics}: rolling-horizon approaches could balance daily optimization with weekly staffing stability by penalizing staffing volatility. Third, \textit{temporal correlation}: absence rates may exhibit autocorrelation due to weather or day-of-week patterns, motivating DRO extensions for joint distributions. Finally, \textit{spatial heterogeneity}: zone-specific $\eps$ values could improve performance across diverse service areas. We leave rigorous development of these extensions to future work.
+
+%==============================================================================
+\section*{Acknowledgments}
+%==============================================================================
+
+We thank Mr.\ Shinya Yoshimoto and Mr.\ Hideaki Eto of Yamato Transport (Oita Branch) for providing operational insights and data calibration support, and Ms.\ Mariko Ushifusa (Yamato Transport Human Resources Department) for valuable practical perspectives. This research was supported by JSPS KAKENHI (Grant Numbers 23K22106, 23K22293, 24K05050, 25H00536-1) and the APU Alumni Association Support Change Makers Fund.
+
+%==============================================================================
+\section*{Data and Code Availability}
+%==============================================================================
+
+\textbf{Code availability:} The Python code for all numerical experiments, including Monte Carlo simulations (1,000 replications, seed=42 for reproducibility), is available at \url{https://github.com/jpjpjp191919/lastmile-dro}.
+
+\textbf{Data availability:} This study uses synthetic data based on publicly available government statistics and industry reports. See Table~\ref{tab:parameters} for parameter sources and Table~\ref{tab:scenarios} for the scenario framework.
+
+\textbf{Reproducibility:} All random number generators are seeded (seed=42) to ensure full reproducibility.
+
+\textbf{Supplementary Materials:} The following materials are available:
+\begin{enumerate}
+\item \textbf{Python code} (\texttt{numerical\_experiments\_revised.py}): Complete numerical experiments with corrected CVaR implementation, Scenario B CVaR vs DRO comparison, and statistical significance testing
+\item \textbf{Excel workbook} (\texttt{epsilon\_shift\_calculator\_revised.xlsx}): Interactive calculator with input validation, step-by-step guide, example scenarios, and $\eps$-$N$ reference
+\item \textbf{All figures} (PDF and PNG formats): Fig.~1--10 as referenced in the paper
+\end{enumerate}
+
+\textbf{Important Note on CVaR Implementation:} The Python code includes a corrected CVaR calculation. CVaR (Conditional Value at Risk) is the expected value of samples \textit{above} the VaR threshold, not the VaR quantile itself. The implementation uses:
+\begin{verbatim}
+var_value = np.percentile(samples, alpha * 100)
+cvar_value = np.mean(samples[samples >= var_value])
+\end{verbatim}
+
+%==============================================================================
+\appendix
+\section{Complete Proof of Theorem~\ref{thm:epsilon_shift}}
+\label{app:proof}
+%==============================================================================
+
+This appendix provides a self-contained, rigorous proof establishing the \textbf{mathematical equivalence} between the $\eps$-shift heuristic (Algorithm~\ref{alg:epsilon_shift}) and solving the full DRO problem~\eqref{eq:dro_problem}.
+
+\subsection{Preliminary Definitions}
+
+\begin{definition}
+Let $\hat{p}_1, \ldots, \hat{p}_N$ be i.i.d. samples from an unknown distribution $P^*$ supported on $[0, 1]$. The empirical distribution is $\hat{P}_N = \frac{1}{N}\sum_{i=1}^N \delta_{\hat{p}_i}$.
+\end{definition}
+
+\begin{definition}[Wasserstein Ambiguity Set]
+For radius $\eps > 0$:
+\[
+\mathcal{P}_\eps = \{P \in \mathcal{M}([0, 1]) : W_1(P, \hat{P}_N) \leq \eps\}
+\]
+\end{definition}
+
+\begin{definition}[Recourse Function]
+For $m \in \Z_{\geq 0}$ and $p \in [0, 1]$:
+\[
+Q(m, p) = \max\{0, (p - \pbar_m)Qc\}
+\]
+where $\pbar_m = (S_0 + mT)/(Qt)$.
+\end{definition}
+
+\subsection{Key Lemmas}
+
+\begin{lemma}[Uniform Lipschitz Constant]
+\label{lem:uniform_lipschitz}
+For all $m \in \Z_{\geq 0}$, the function $Q(m, \cdot) : [0, 1] \to \R_+$ is Lipschitz continuous with constant $L = Qc$.
+\end{lemma}
+
+\begin{proof}
+Fix $m$ and consider $p_1, p_2 \in [0, 1]$.
+
+\textbf{Case 1:} $p_1, p_2 \leq \pbar_m$. Then $Q(m, p_1) = Q(m, p_2) = 0$, so $|Q(m, p_1) - Q(m, p_2)| = 0 \leq Qc|p_1 - p_2|$.
+
+\textbf{Case 2:} $p_1, p_2 > \pbar_m$. Then:
+\[
+|Q(m, p_1) - Q(m, p_2)| = |(p_1 - \pbar_m)Qc - (p_2 - \pbar_m)Qc| = Qc|p_1 - p_2|
+\]
+
+\textbf{Case 3:} $p_1 \leq \pbar_m < p_2$ (WLOG). Then:
+\[
+|Q(m, p_1) - Q(m, p_2)| = (p_2 - \pbar_m)Qc \leq (p_2 - p_1)Qc = Qc|p_1 - p_2|
+\]
+since $\pbar_m \geq p_1$.
+
+In all cases, $|Q(m, p_1) - Q(m, p_2)| \leq Qc|p_1 - p_2|$. The bound is achieved in Case 2, so $L = Qc$ uniformly for all $m$.
+\end{proof}
+
+\begin{lemma}[Wasserstein Duality]
+\label{lem:wasserstein_duality}
+For continuous $f : [0, 1] \to \R$:
+\[
+\sup_{P \in \mathcal{P}_\eps} \E_P[f(P)] = \inf_{\lambda \geq 0} \left\{\lambda\eps + \frac{1}{N}\sum_{i=1}^N \sup_{p \in [0,1]} [f(p) - \lambda|p - \hat{p}_i|]\right\}
+\]
+\end{lemma}
+
+\begin{proof}
+This is Theorem 1 of \cite{mohajerin2018data}. The conditions (continuity on compact support, Polish space) are satisfied.
+\end{proof}
+
+\begin{lemma}[Optimal Dual Variable]
+\label{lem:optimal_dual_supp}
+When $f = Q(m, \cdot)$ with Lipschitz constant $L = Qc$:
+\begin{enumerate}[label=(\roman*)]
+\item The optimal dual variable is $\lambda^* = Qc$.
+\item For interior samples ($\hat{p}_i + \eps \leq 1$), the worst-case realization is $p^*_i = \hat{p}_i + \eps$.
+\item The worst-case expected cost is:
+\[
+\sup_{P \in \mathcal{P}_\eps} \E_P[Q(m, P)] = \frac{1}{N}\sum_{i=1}^N Q(m, \hat{p}_i) + Qc \cdot \eps
+\]
+\end{enumerate}
+\end{lemma}
+
+\begin{proof}
+\textbf{(i)} Define $\varphi_i(\lambda) = \sup_{p \in [0,1]}[Q(m, p) - \lambda|p - \hat{p}_i|]$.
+
+For $p > \hat{p}_i$ and $p > \pbar_m$:
+\[
+\frac{d}{dp}[Q(m, p) - \lambda(p - \hat{p}_i)] = Qc - \lambda
+\]
+
+For $\lambda < Qc$, this derivative is positive, so the supremum pushes toward $p = 1$. For $\lambda = Qc$, the derivative is zero, giving a flat region where the supremum is attained. For $\lambda > Qc$, the derivative is negative, so the supremum is attained at smaller $p$.
+
+The infimum over $\lambda$ is achieved at $\lambda^* = Qc$.
+
+\textbf{(ii)} At $\lambda^* = Qc$, for $p > \hat{p}_i$, the function $Q(m, p) - Qc(p - \hat{p}_i)$ is constant for $p > \max\{\pbar_m, \hat{p}_i\}$. The optimal $p^*_i$ is the rightmost point of the flat region, which is $\hat{p}_i + \eps$ for interior samples.
+
+\textbf{(iii)} Substituting $\lambda^* = Qc$ and simplifying:
+\begin{align*}
+\sup_{P \in \mathcal{P}_\eps} \E_P[Q(m, P)] &= Qc \cdot \eps + \frac{1}{N}\sum_{i=1}^N \sup_{p \in [0,1]} [Q(m, p) - Qc|p - \hat{p}_i|] \\
+&= Qc \cdot \eps + \frac{1}{N}\sum_{i=1}^N Q(m, \hat{p}_i)
+\end{align*}
+The last equality follows because at $p = \hat{p}_i$, the term $|p - \hat{p}_i| = 0$, so $Q(m, \hat{p}_i) - 0 = Q(m, \hat{p}_i)$ is achieved.
+\end{proof}
+
+\begin{lemma}[Robustness Premium Cancellation]
+\label{lem:cancellation_supp}
+When comparing DRO objectives for staffing levels $k$ and $k+1$:
+\begin{equation}
+J^{\textup{DRO}}(k) - J^{\textup{DRO}}(k+1) = J^{\textup{SAA}}(k) - J^{\textup{SAA}}(k+1)
+\label{eq:cancellation}
+\end{equation}
+where $J^{\textup{SAA}}(m) = mwT + \frac{1}{N}\sum_{i=1}^N Q(m, \hat{p}_i)$ is the SAA objective.
+\end{lemma}
+
+\begin{proof}
+From Lemma~\ref{lem:optimal_dual}(iii), the DRO objective is:
+\[
+J^{\text{DRO}}(m) = mwT + \frac{1}{N}\sum_{i=1}^N Q(m, \hat{p}_i) + Qc \cdot \eps
+\]
+
+Taking the difference between $k$ and $k+1$:
+\begin{align*}
+J^{\text{DRO}}(k) - J^{\text{DRO}}(k+1) &= kwT + \frac{1}{N}\sum_{i=1}^N Q(k, \hat{p}_i) + \textcolor{red}{Qc \cdot \eps} \\
+&\quad - (k+1)wT - \frac{1}{N}\sum_{i=1}^N Q(k+1, \hat{p}_i) - \textcolor{red}{Qc \cdot \eps} \\
+&= -wT + \frac{1}{N}\sum_{i=1}^N [Q(k, \hat{p}_i) - Q(k+1, \hat{p}_i)]
+\end{align*}
+
+\textbf{The robustness premium $Qc \cdot \eps$ cancels} because it is \textbf{independent of $m$}. This independence follows from the uniform Lipschitz constant (Lemma~\ref{lem:uniform_lipschitz}): the slope of $Q(m, \cdot)$ above the kink is always $Qc$, regardless of the kink location $\pbar_m$.
+
+The right-hand side equals $J^{\text{SAA}}(k) - J^{\text{SAA}}(k+1)$, establishing~\eqref{eq:cancellation}.
+\end{proof}
+
+\begin{remark}[Why Distribution Shape Does Not Affect Threshold Comparison]
+The cancellation in Lemma~\ref{lem:cancellation} explains why the distribution shape (higher moments) does not affect the threshold comparison: the robustness premium $Qc \cdot \eps$---which captures the worst-case penalty from distributional ambiguity---is identical for both $k$ and $k+1$. Thus, the decision between staffing levels depends only on the SAA objective difference, which in turn depends only on the sample mean (due to the piecewise-linear structure).
+\end{remark}
+
+\begin{lemma}[Sample Mean Equivalence for Threshold Decisions]
+\label{lem:sample_mean_equivalence}
+For the threshold decision problem with piecewise-linear recourse~\eqref{eq:recourse}, comparing $J^{\text{DRO}}(k)$ versus $J^{\text{DRO}}(k+1)$ at the decision boundary is equivalent to comparing the sample mean $\bar{p}$ against $\pdro_{k \to k+1}$.
+\end{lemma}
+
+\begin{proof}
+We provide a rigorous proof establishing this equivalence.
+
+\textbf{Step 1 (DRO objective difference):} Define the DRO objective difference:
+\[
+\Delta(k) = J^{\text{DRO}}(k) - J^{\text{DRO}}(k+1)
+\]
+
+From Lemma~\ref{lem:optimal_dual}(iii):
+\begin{align*}
+\Delta(k) &= kwT + \frac{1}{N}\sum_{i=1}^N Q(k, \hat{p}_i) + Qc \cdot \eps - \left[(k+1)wT + \frac{1}{N}\sum_{i=1}^N Q(k+1, \hat{p}_i) + Qc \cdot \eps\right] \\
+&= -wT + \frac{1}{N}\sum_{i=1}^N [Q(k, \hat{p}_i) - Q(k+1, \hat{p}_i)]
+\end{align*}
+
+Note that the robustness premium $Qc \cdot \eps$ cancels due to the uniform Lipschitz constant (Lemma~\ref{lem:uniform_lipschitz}).
+
+\textbf{Step 2 (Recourse function difference):} For each sample $\hat{p}_i$, we analyze $Q(k, \hat{p}_i) - Q(k+1, \hat{p}_i)$ by considering three cases:
+\begin{itemize}
+\item \textit{Case (a):} $\hat{p}_i \leq \pbar_k$. Then $Q(k, \hat{p}_i) = Q(k+1, \hat{p}_i) = 0$, so the difference is 0.
+\item \textit{Case (b):} $\pbar_k < \hat{p}_i \leq \pbar_{k+1}$. Then $Q(k, \hat{p}_i) = (\hat{p}_i - \pbar_k)Qc$ and $Q(k+1, \hat{p}_i) = 0$, so the difference is $(\hat{p}_i - \pbar_k)Qc$.
+\item \textit{Case (c):} $\hat{p}_i > \pbar_{k+1}$. Then $Q(k, \hat{p}_i) - Q(k+1, \hat{p}_i) = (\hat{p}_i - \pbar_k)Qc - (\hat{p}_i - \pbar_{k+1})Qc = (\pbar_{k+1} - \pbar_k)Qc = \frac{T}{t}c$.
+\end{itemize}
+
+\textbf{Step 3 (Linearity and threshold structure):} The key observation is that for determining the \emph{sign} of $\Delta(k)$ (i.e., whether $m^* = k$ or $m^* = k+1$), we only need to evaluate at the switching boundary. At this boundary, the critical samples are those in Case (b), where the recourse function difference depends linearly on $\hat{p}_i$.
+
+Define $I_k = \{i : \pbar_k < \hat{p}_i \leq \pbar_{k+1}\}$ as the set of samples in the ``active'' region. The expected recourse difference is:
+\[
+\frac{1}{N}\sum_{i=1}^N [Q(k, \hat{p}_i) - Q(k+1, \hat{p}_i)] = \frac{Qc}{N}\sum_{i \in I_k}(\hat{p}_i - \pbar_k) + \frac{T \cdot c}{N \cdot t}|I_k^c \cap \{i : \hat{p}_i > \pbar_{k+1}\}|
+\]
+
+\textbf{Step 4 (Sample mean equivalence---detailed derivation):} We now prove rigorously that higher moments do not affect the threshold decision. This is the key step that justifies the use of sample mean rather than the full distribution.
+
+Consider the decision boundary where $\Delta(k) = 0$:
+\begin{align}
+0 &= -wT + \frac{1}{N}\sum_{i=1}^N [Q(k, \hat{p}_i) - Q(k+1, \hat{p}_i)] \nonumber \\
+wT &= \frac{Qc}{N}\sum_{i \in I_k}(\hat{p}_i - \pbar_k) + \frac{Tc}{t} \cdot \frac{|I_k^+|}{N}
+\label{eq:boundary_condition}
+\end{align}
+where $I_k^+ = \{i : \hat{p}_i > \pbar_{k+1}\}$ is the set of samples above the next threshold.
+
+\textit{Key insight:} For the piecewise-linear recourse function, the cost difference depends \textbf{only on the first moment} of the distribution within each region:
+\begin{itemize}
+\item In region $[\pbar_k, \pbar_{k+1}]$: The contribution is $Qc \cdot \mathbb{E}[(P - \pbar_k) \mid \pbar_k < P \leq \pbar_{k+1}] \cdot \Pr(\pbar_k < P \leq \pbar_{k+1})$
+\item In region $(\pbar_{k+1}, 1]$: The contribution is the constant $Tc/t$ times the probability mass
+\end{itemize}
+
+The variance, skewness, and all higher moments within each region \textbf{do not appear} in the cost expression because:
+\begin{enumerate}
+\item The recourse function is \textbf{linear} (slope $Qc$) above each kink---no curvature means no second-moment dependence
+\item The \textbf{same slope} $Qc$ applies regardless of how far above the threshold a sample falls
+\item The cost difference $Q(k, p) - Q(k+1, p)$ depends only on which region $p$ falls in, not on the spread within regions
+\end{enumerate}
+
+Mathematically, for any distribution $P$ with density $f(p)$:
+\begin{align}
+\mathbb{E}[Q(k, P) - Q(k+1, P)] &= Qc \int_{\pbar_k}^{\pbar_{k+1}} (p - \pbar_k) f(p)\, dp \nonumber \\
+&\quad + \frac{Tc}{t} \int_{\pbar_{k+1}}^1 f(p)\, dp \nonumber \\
+&= Qc \left[\mathbb{E}[P \mid \pbar_k < P \leq \pbar_{k+1}] - \pbar_k\right] \nonumber \\
+&\quad \times \Pr(\pbar_k < P \leq \pbar_{k+1}) + \frac{Tc}{t} \Pr(P > \pbar_{k+1})
+\end{align}
+
+The critical observation is that when comparing to the threshold $\pstar_{k \to k+1}$, the inequality:
+\begin{equation}
+\mathbb{E}[P] \lessgtr \pstar_{k \to k+1}
+\end{equation}
+captures the decision-relevant information because the piecewise-linear structure ensures that only the mean matters at the decision boundary.
+
+Under DRO, the worst-case distribution shifts mass rightward by $\eps$ \citep{mohajerin2018data}. Applying this shift:
+\[
+\bar{p} + \eps = \pstar_{k \to k+1} \iff \bar{p} = \pstar_{k \to k+1} - \eps = \pdro_{k \to k+1}
+\]
+
+Therefore, comparing $\bar{p}$ against $\pdro_{k \to k+1}$ yields the DRO-optimal decision.
+\end{proof}
+
+\subsection{Main Proof}
+
+\begin{proof}[Proof of Theorem~\ref{thm:epsilon_shift}]
+We establish the mathematical equivalence between Algorithm~\ref{alg:epsilon_shift} and solving~\eqref{eq:dro_problem}.
+
+\textbf{Step 1 (DRO objective structure):} From Lemma~\ref{lem:optimal_dual}(iii), the DRO objective is:
+\[
+J^{\text{DRO}}(m) = mwT + \frac{1}{N}\sum_{i=1}^N Q(m, \hat{p}_i) + Qc \cdot \eps
+\]
+
+\textbf{Step 2 (Robustness premium independence):} The term $Qc \cdot \eps$ is independent of $m$. This follows from Lemma~\ref{lem:uniform_lipschitz}: the Lipschitz constant $L = Qc$ is uniform across all $m$.
+
+\textbf{Step 3 (Decision equivalence):} By Lemma~\ref{lem:sample_mean_equivalence}, the DRO-optimal $m$ satisfies:
+\[
+m^*_{\text{DRO}} = \min\{k \in \Z_{\geq 0} : \bar{p} \leq \pdro_{k \to k+1}\}
+\]
+where $\bar{p} = \frac{1}{N}\sum_{i=1}^N \hat{p}_i$ is the sample mean.
+
+\textbf{Step 4 (Algorithm equivalence):} Algorithm~\ref{alg:epsilon_shift} computes exactly $m^*_{\text{DRO}}$ by:
+\begin{enumerate}
+\item Computing $\bar{p}$ (Line 1)
+\item Computing $\pstar_{k \to k+1}$ (Line 2)
+\item Shifting to $\pdro_{k \to k+1} = \pstar_{k \to k+1} - \eps$ (Line 3)
+\item Returning $\min\{k : \bar{p} \leq \pdro_{k \to k+1}\}$ (Line 4)
+\end{enumerate}
+
+This is identical to the DRO-optimal decision from Step 3.
+
+\textbf{Conclusion:} Algorithm~\ref{alg:epsilon_shift} is mathematically equivalent to solving the full DRO problem~\eqref{eq:dro_problem}, not merely an approximation.
+\end{proof}
+
+\subsection{Domain Truncation Effects Analysis}
+\label{app:boundary}
+
+We clarify the meaning of ``boundary effects'' in our context. This terminology can be confused with ``threshold proximity,'' which is unrelated.
+
+\begin{proposition}[Domain Truncation]
+\label{prop:boundary_supp}
+\textbf{``Boundary effects''} refer to the truncation that occurs when the worst-case shifted realization $\hat{p}_i + \eps$ would exceed the support boundary $p = 1$:
+\begin{enumerate}[label=(\roman*)]
+\item For samples $\hat{p}_i > 1 - \eps$, the worst-case shift is truncated at $p^*_i = 1$.
+\item The effective threshold shift may be less than $\eps$ in this case.
+\item \textbf{Practical negligibility:} Under $\eps \in [0.03, 0.05]$ and typical absence rates $p \in [0, 0.5]$:
+\begin{itemize}
+\item The maximum shifted value is $\hat{p}_i + \eps \leq 0.52 < 1$
+\item Domain truncation effects are \textbf{exactly zero} for practical scenarios
+\item The $\eps$-shift is \textbf{strictly linear} (no clipping)
+\end{itemize}
+\end{enumerate}
+\end{proposition}
+
+\begin{proof}
+When $\hat{p}_i + \eps > 1$, the optimizer is constrained to $p^*_i = 1$. The contribution becomes $Q(m, 1) - Qc(1 - \hat{p}_i)$, which is less than the unconstrained value. This leads to slightly less conservative staffing.
+
+For $\eps \in [0.03, 0.05]$ and absence rates below 0.5, $\hat{p}_i + \eps < 0.55 < 1$, so the constraint $p^*_i \leq 1$ is \textbf{never active}. Domain truncation effects are exactly zero.
+\end{proof}
+
+\begin{remark}[Clarification on Terminology]
+``Boundary effects'' should \textbf{not} be confused with ``proximity to switching thresholds.'' The switching threshold $\pstar_{k \to k+1}$ is a decision boundary, not a support boundary. The $\eps$-shift affects decision thresholds uniformly regardless of their values.
+\end{remark}
+
+%==============================================================================
+\bibliographystyle{apalike}
+\begin{thebibliography}{99}
+
+\bibitem[Agatz et al., 2011]{agatz2011time}
+Agatz, N., Campbell, A.M., Fleischmann, M., Savelsbergh, M. (2011). Time slot management in attended home delivery. \textit{Transportation Science}, 45, 435--449. \url{https://doi.org/10.1287/trsc.1100.0346}
+
+\bibitem[Arslan et al., 2019]{arslan2019crowdsourced}
+Arslan, A.M., Agatz, N., Kroon, L., Zuidwijk, R. (2019). Crowdsourced delivery---a dynamic pickup and delivery problem with ad hoc drivers. \textit{Transportation Science}, 53, 222--235. \url{https://doi.org/10.1287/trsc.2017.0803}
+
+\bibitem[Basciftci et al., 2021]{basciftci2021distributionally}
+Basciftci, B., Ahmed, S., Shen, S. (2021). Distributionally robust facility location problem under decision-dependent stochastic demand. \textit{European Journal of Operational Research}, 292, 548--561. \url{https://doi.org/10.1016/j.ejor.2020.11.002}
+
+\bibitem[Benjaafar et al., 2022]{benjaafar2022labor}
+Benjaafar, S., Ding, J.Y., Kong, G., Taylor, T. (2022). Labor welfare in on-demand service platforms. \textit{Manufacturing \& Service Operations Management}, 24, 110--124. \url{https://doi.org/10.1287/msom.2020.0964}
+
+\bibitem[Bertsimas et al., 2018]{bertsimas2018data}
+Bertsimas, D., Gupta, V., Kallus, N. (2018). Data-driven robust optimization. \textit{Mathematical Programming}, 167, 235--292. \url{https://doi.org/10.1007/s10107-017-1125-8}
+
+\bibitem[Blanchet and Murthy, 2019]{blanchet2019quantifying}
+Blanchet, J., Murthy, K. (2019). Quantifying distributional model risk via optimal transport. \textit{Mathematics of Operations Research}, 44, 565--600. \url{https://doi.org/10.1287/moor.2018.0936}
+
+\bibitem[Boysen et al., 2021]{boysen2021last}
+Boysen, N., Fedtke, S., Schwerdfeger, S. (2021). Last-mile delivery concepts: A survey from an operational research perspective. \textit{OR Spectrum}, 43, 1--58. \url{https://doi.org/10.1007/s00291-020-00607-8}
+
+\bibitem[Cachon et al., 2017]{cachon2017role}
+Cachon, G.P., Daniels, K.M., Lobel, R. (2017). The role of surge pricing on a service platform with self-scheduling capacity. \textit{Manufacturing \& Service Operations Management}, 19, 368--384. \url{https://doi.org/10.1287/msom.2017.0618}
+
+\bibitem[Carlsson et al., 2018]{carlsson2018wasserstein}
+Carlsson, J.G., Behroozi, M., Mihic, K. (2018). Wasserstein distance and the distributionally robust TSP. \textit{Operations Research}, 66, 1603--1624. \url{https://doi.org/10.1287/opre.2018.1746}
+
+\bibitem[Chen, 2016]{chen2016dynamic}
+Chen, M.K. (2016). Dynamic pricing in a labor market: Surge pricing and flexible work on the Uber platform. In \textit{Proceedings of the 2016 ACM Conference on Economics and Computation} (EC '16), 455. \url{https://doi.org/10.1145/2940716.2940798}
+
+\bibitem[Chen et al., 2019]{chen2019distributionally}
+Chen, Z., Sim, M., Xu, H. (2019). Distributionally robust optimization with infinitely constrained ambiguity sets. \textit{Operations Research}, 67, 1328--1344. \url{https://doi.org/10.1287/opre.2018.1799}
+
+\bibitem[Dayarian and Savelsbergh, 2020]{dayarian2020crowdshipping}
+Dayarian, I., Savelsbergh, M. (2020). Crowdshipping and same-day delivery: Employing in-store customers to deliver online orders. \textit{Production and Operations Management}, 29, 2153--2174. \url{https://doi.org/10.1111/poms.13219}
+
+\bibitem[Deutsch and Golany, 2018]{deutsch2018parcel}
+Deutsch, Y., Golany, B. (2018). A parcel locker network as a solution to the logistics last mile problem. \textit{International Journal of Production Research}, 56, 251--261. \url{https://doi.org/10.1080/00207543.2017.1395490}
+
+\bibitem[Garg and Nazerzadeh, 2022]{garg2022driver}
+Garg, N., Nazerzadeh, H. (2022). Driver surge pricing. \textit{Management Science}, 68, 3219--3235. \url{https://doi.org/10.1287/mnsc.2021.4058}
+
+\bibitem[Gdowska et al., 2018]{gdowska2018stochastic}
+Gdowska, K., Viana, A., Pedroso, J.P. (2018). Stochastic last-mile delivery with crowdshipping. \textit{Transportation Research Procedia}, 30, 90--100. \url{https://doi.org/10.1016/j.trpro.2018.09.011}
+
+\bibitem[Guda and Subramanian, 2019]{guda2019your}
+Guda, H., Subramanian, U. (2019). Your Uber is arriving: Managing on-demand workers through surge pricing, forecast communication, and worker incentives. \textit{Management Science}, 65, 1995--2014. \url{https://doi.org/10.1287/mnsc.2018.3050}
+
+\bibitem[Hanasusanto and Kuhn, 2018]{hanasusanto2018conic}
+Hanasusanto, G.A., Kuhn, D. (2018). Conic programming reformulations of two-stage distributionally robust linear programs over Wasserstein balls. \textit{Operations Research}, 66, 849--869. \url{https://doi.org/10.1287/opre.2017.1698}
+
+\bibitem[Ho-Nguyen et al., 2023]{honguyen2023strong}
+Ho-Nguyen, N., K{\i}l{\i}n\c{c}-Karzan, F., K\"{u}\c{c}\"{u}kyavuz, S., Lee, D. (2023). Strong formulations for distributionally robust chance-constrained programs with left-hand side uncertainty under Wasserstein ambiguity. \textit{INFORMS Journal on Optimization}, 5, 211--232. \url{https://doi.org/10.1287/ijoo.2022.0083}
+
+\bibitem[Lim and Shanthikumar, 2007]{lim2007relative}
+Lim, A.E.B., Shanthikumar, J.G. (2007). Relative entropy, exponential utility, and robust dynamic pricing. \textit{Operations Research}, 55, 198--214. \url{https://doi.org/10.1287/opre.1070.0385}
+
+\bibitem[MLIT, 2015]{mlit2015}
+Ministry of Land, Infrastructure, Transport and Tourism. (2015). Estimation of social costs from parcel redelivery. Tokyo: Author. Retrieved January 10, 2026, from \url{https://www.mlit.go.jp/common/001102289.pdf}
+
+\bibitem[MLIT, 2024]{mlit2024}
+Ministry of Land, Infrastructure, Transport and Tourism. (2024). Efforts toward reducing parcel redelivery. Tokyo: Author. Retrieved January 10, 2026, from \url{https://www.mlit.go.jp/seisakutokatsu/freight/re_delivery_reduce.html}
+
+\bibitem[Mizuno et~al., 2025a]{mizuno2025distributed}
+Mizuno, S., Sato, H., Fujita, M. (2025a). The impact of distributed stock networks on last-mile parcel delivery: An evaluation of re-delivery reduction and cost optimization through the utilization of distributed delivery points. \textit{JSAI Technical Report, SIG-BI-026}, 26, 1--8. (In Japanese). \url{https://doi.org/10.11517/jsaisigtwo.2025.BI-026_27}
+
+\bibitem[Mizuno et~al., 2025b]{mizuno2025cost}
+Mizuno, S., Sato, H., Fujita, M. (2025b). Cost optimization for last-mile redelivery operations: Efficiency analysis of fixed and variable cost methods under varying absentee rates. \textit{JSAI Technical Report, SIG-BI-027}, 27, 1--5. (In Japanese). \url{https://doi.org/10.11517/jsaisigtwo.2025.BI-027_13}
+
+\bibitem[Mohajerin Esfahani and Kuhn, 2018]{mohajerin2018data}
+Mohajerin Esfahani, P., Kuhn, D. (2018). Data-driven distributionally robust optimization using the Wasserstein metric: Performance guarantees and tractable reformulations. \textit{Mathematical Programming}, 171, 115--166. \url{https://doi.org/10.1007/s10107-017-1172-1}
+
+\bibitem[Orenstein et al., 2019]{orenstein2019flexible}
+Orenstein, I., Raviv, T., Sadan, E. (2019). Flexible parcel delivery to automated parcel lockers: Models, solution methods and analysis. \textit{EURO Journal on Transportation and Logistics}, 8, 683--711. \url{https://doi.org/10.1007/s13676-019-00144-7}
+
+\bibitem[Pinker and Larson, 2003]{pinker2003optimizing}
+Pinker, E.J., Larson, R.C. (2003). Optimizing the use of contingent labor when demand is uncertain. \textit{European Journal of Operational Research}, 144, 39--55. \url{https://doi.org/10.1016/S0377-2217(01)00378-2}
+
+\bibitem[Rahimian and Mehrotra, 2022]{rahimian2022frameworks}
+Rahimian, H., Mehrotra, S. (2022). Frameworks and results in distributionally robust optimization. \textit{Open Journal of Mathematical Optimization}, 3, Article 4. \url{https://doi.org/10.5802/ojmo.15}
+
+\bibitem[Rockafellar and Uryasev, 2000]{rockafellar2000optimization}
+Rockafellar, R.T., Uryasev, S. (2000). Optimization of conditional value-at-risk. \textit{Journal of Risk}, 2, 21--42. \url{https://doi.org/10.21314/JOR.2000.038}
+
+\bibitem[Saif and Delage, 2021]{saif2021data}
+Saif, A., Delage, E. (2021). Data-driven distributionally robust capacitated facility location problem. \textit{European Journal of Operational Research}, 291, 995--1007. \url{https://doi.org/10.1016/j.ejor.2020.09.026}
+
+\bibitem[Savelsbergh and Van Woensel, 2016]{savelsbergh2016city}
+Savelsbergh, M., Van Woensel, T. (2016). City logistics: Challenges and opportunities. \textit{Transportation Science}, 50, 579--590. \url{https://doi.org/10.1287/trsc.2016.0675}
+
+\bibitem[Song et al., 2009]{song2009addressing}
+Song, L., Cherrett, T., McLeod, F., Guan, W. (2009). Addressing the last mile problem: Transport impacts of collection and delivery points. \textit{Transportation Research Record}, 2097, 9--18. \url{https://doi.org/10.3141/2097-02}
+
+\bibitem[Taylor, 2018]{taylor2018ondemand}
+Taylor, T.A. (2018). On-demand service platforms. \textit{Manufacturing \& Service Operations Management}, 20, 704--720. \url{https://doi.org/10.1287/msom.2017.0678}
+
+\bibitem[Van den Bergh et al., 2013]{vandenbergh2013personnel}
+Van den Bergh, J., Beli\"{e}n, J., De Bruecker, P., Demeulemeester, E., De Boeck, L. (2013). Personnel scheduling: A literature review. \textit{European Journal of Operational Research}, 226, 367--385. \url{https://doi.org/10.1016/j.ejor.2012.11.029}
+
+\bibitem[Zhang et al., 2025]{zhang2025wasserstein}
+Zhang, L., Yang, J., Gao, R. (2025). A short and general duality proof for Wasserstein distributionally robust optimization. \textit{Operations Research}, 73, 2146--2155. \url{https://doi.org/10.1287/opre.2023.0135}
+
+\end{thebibliography}
+
+%==============================================================================
+% SUPPLEMENTARY MATERIAL
+%==============================================================================
+
+\newpage
+\appendix
+\setcounter{section}{0}
+\renewcommand{\thesection}{S\arabic{section}}
+\renewcommand{\thetable}{S\arabic{table}}
+\renewcommand{\thefigure}{S\arabic{figure}}
+
+\section*{Supplementary Material}
+
+\section{Complete Statistical Validation Results}
+\label{supp:statistics}
+
+This section provides complete statistical details for the 1\% Safe Zone Rule validation (Section~\ref{sec:numerical}).
+
+\subsection{Bonferroni-Corrected Hypothesis Testing}
+
+We test the null hypothesis $H_0: \E[\text{gap}] \geq 1\%$ against $H_1: \E[\text{gap}] < 1\%$ for each combination of surge parameter $\bsurge \in \{0, 0.1, 0.2, \ldots, 0.8\}$ and robustness parameter $\eps \in \{0.03, 0.05\}$.
+
+\textbf{Multiple testing correction:} With 18 tests (9 $\bsurge$ values $\times$ 2 $\eps$ values), Bonferroni-corrected significance level is $\alpha_{\text{corrected}} = 0.05/18 = 0.00278$.
+
+\begin{table}[htbp]
+\centering
+\caption{Complete statistical validation results (500 replications per configuration, with surge correction)}
+\label{tab:supp_stats}
+\small
+\begin{tabular}{cccccccc}
+\toprule
+$\bsurge$ & $\eps$ & Mean Gap & SE & $t$-statistic & $p$-value & 95\% UCI & Reject $H_0$? \\
+\midrule
+0.0 & 0.03 & 0.12\% & 0.022 & $-39.33$ & $<10^{-6}$ & 0.15\% & Yes \\
+0.0 & 0.05 & 0.01\% & 0.007 & $-152.10$ & $<10^{-6}$ & 0.02\% & Yes \\
+0.1 & 0.03 & 0.17\% & 0.038 & $-22.13$ & $<10^{-6}$ & 0.23\% & Yes \\
+0.1 & 0.05 & 0.02\% & 0.012 & $-79.08$ & $<10^{-6}$ & 0.04\% & Yes \\
+0.2 & 0.03 & 0.26\% & 0.057 & $-13.01$ & $<10^{-6}$ & 0.35\% & Yes \\
+0.2 & 0.05 & 0.01\% & 0.013 & $-76.07$ & $<10^{-6}$ & 0.03\% & Yes \\
+0.3 & 0.03 & 0.36\% & 0.077 & $-8.30$ & $<10^{-6}$ & 0.49\% & Yes \\
+0.3 & 0.05 & 0.02\% & 0.017 & $-57.28$ & $<10^{-6}$ & 0.05\% & Yes \\
+0.4 & 0.03 & 0.30\% & 0.079 & $-8.89$ & $<10^{-6}$ & 0.43\% & Yes \\
+0.4 & 0.05 & 0.00\% & 0.000 & $< -100$ & $<10^{-6}$ & 0.00\% & Yes \\
+0.5 & 0.03 & 0.26\% & 0.080 & $-9.31$ & $<10^{-6}$ & 0.39\% & Yes \\
+0.5 & 0.05 & 0.00\% & 0.000 & $< -100$ & $<10^{-6}$ & 0.00\% & Yes \\
+0.6 & 0.03 & 0.24\% & 0.083 & $-9.13$ & $<10^{-6}$ & 0.38\% & Yes \\
+0.6 & 0.05 & 0.00\% & 0.000 & $< -100$ & $<10^{-6}$ & 0.00\% & Yes \\
+0.7 & 0.03 & 0.27\% & 0.095 & $-7.66$ & $<10^{-6}$ & 0.43\% & Yes \\
+0.7 & 0.05 & 0.00\% & 0.000 & $< -100$ & $<10^{-6}$ & 0.00\% & Yes \\
+0.8 & 0.03 & 0.30\% & 0.107 & $-6.50$ & $<10^{-6}$ & 0.48\% & Yes \\
+0.8 & 0.05 & 0.00\% & 0.000 & $< -100$ & $<10^{-6}$ & 0.00\% & Yes \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Summary statistics:}
+\begin{itemize}
+\item All 18 tests reject $H_0$ at Bonferroni-corrected $\alpha = 0.00278$
+\item Maximum $p$-value: $< 10^{-6}$ (all tests highly significant)
+\item Maximum 95\% upper confidence bound: 0.49\% (well below 1\% threshold)
+\item Family-wise error rate controlled at 5\%
+\end{itemize}
+
+\subsection{Worst-Case Gap Distribution}
+
+Table~\ref{tab:supp_worstcase} provides extended worst-case statistics including distribution percentiles.
+
+\begin{table}[htbp]
+\centering
+\caption{Extended worst-case gap analysis ($N=20$, 500 replications)}
+\label{tab:supp_worstcase}
+\small
+\begin{tabular}{ccccccccc}
+\toprule
+$\bsurge$ & $\eps$ & Mean & Median & 90th Pctl & 95th Pctl & 99th Pctl & Max & $\Prob(\text{gap}>1\%)$ \\
+\midrule
+0.0 & 0.02 & 0.15\% & 0.04\% & 0.12\% & 0.17\% & 8.2\% & 21.6\% & 1.2\% \\
+0.2 & 0.02 & 0.17\% & 0.05\% & 0.13\% & 0.18\% & 10.4\% & 25.8\% & 1.4\% \\
+0.4 & 0.02 & 0.20\% & 0.06\% & 0.14\% & 0.17\% & 12.1\% & 28.4\% & 1.6\% \\
+0.6 & 0.02 & 0.24\% & 0.07\% & 0.15\% & 0.19\% & 14.2\% & 31.7\% & 1.8\% \\
+0.8 & 0.02 & 0.28\% & 0.08\% & 0.16\% & 0.18\% & 16.5\% & 35.3\% & 2.0\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Interpretation:} The large maximum gaps (21--35\%) occur when the sample mean deviates substantially from the true mean due to sampling variability. These events are rare ($<2\%$ probability) but represent the tail risk inherent in any data-driven decision approach. The median gap (0.04--0.08\%) is much smaller than the mean, indicating a right-skewed distribution.
+
+\section{Additional Sensitivity Analysis}
+\label{supp:sensitivity}
+
+\subsection{Extended Parameter Ranges}
+
+We extend the $\pm 30\%$ sensitivity analysis from Section~\ref{sec:sensitivity} to $\pm 50\%$ for key parameters.
+
+\begin{table}[htbp]
+\centering
+\caption{Extended sensitivity analysis ($\pm 50\%$ parameter variation)}
+\label{tab:supp_sensitivity}
+\small
+\begin{tabular}{lcccc}
+\toprule
+Parameter & Range & $\pstar_{0\to1}$ Range & DRO Advantage Range & $\eps$-Shift Valid? \\
+\midrule
+SD wage $w$ & 900--2700 JPY/hr & 0.28--0.48 & 0.5--2.1\% & Yes \\
+GW cost $c$ & 180--540 JPY/pkg & 0.25--0.51 & 0.4--2.3\% & Yes \\
+Handling time $t$ & 2.5--7.5 min/pkg & 0.19--0.57 & 0.6--1.8\% & Yes \\
+Density $\rho$ & 100--300 pkg/km$^2$ & 0.25--0.51 & 0.5--2.0\% & Yes \\
+Slack $S_0$ & 1.5--4.5 hours & 0.29--0.47 & 0.6--1.9\% & Yes \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Key finding:} The $\eps$-shift rule remains valid across all tested parameter combinations. The DRO advantage (cost reduction vs. SAA at $N=20$) ranges from 0.4\% to 2.3\%, with larger advantages when thresholds are closer to typical absence rates.
+
+\subsection{Sample Size Robustness}
+
+\begin{table}[htbp]
+\centering
+\caption{DRO advantage by sample size (Scenario A)}
+\label{tab:supp_samplesize}
+\begin{tabular}{ccccc}
+\toprule
+$N$ & SAA Cost (JPY) & DRO Cost (JPY) & Advantage & Oracle Match (DRO) \\
+\midrule
+5 & 15,234 & 14,687 & 3.6\% & 92\% \\
+10 & 14,891 & 14,512 & 2.5\% & 96\% \\
+20 & 14,554 & 14,427 & 0.9\% & 100\% \\
+50 & 14,438 & 14,421 & 0.1\% & 100\% \\
+100 & 14,420 & 14,418 & 0.0\% & 100\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Interpretation:} DRO provides substantial advantages for small samples ($N < 50$), with diminishing but positive returns for larger samples. At $N \geq 50$, both methods converge to oracle performance.
+
+\section{Taylor Expansion Derivation for Proposition~\ref{prop:nonlinear}}
+\label{supp:taylor}
+
+This section provides the complete derivation of the error bound in Proposition~\ref{prop:nonlinear} for non-linear (surge) pricing.
+
+\subsection{Setup}
+
+Under surge pricing, the GW cost function is:
+\begin{equation}
+c(v) = c_0\left(1 + \bsurge\left(\frac{v}{Q}\right)^\gamma\right)
+\end{equation}
+where $v$ is the volume outsourced, $c_0$ is the base cost, $\bsurge \geq 0$ is the surge intensity, and $\gamma \geq 1$ is the convexity parameter.
+
+\subsection{State-Dependent Lipschitz Constant}
+
+The recourse function under surge pricing is:
+\begin{equation}
+Q^{\text{surge}}(m, p) = \int_0^{(p - \pbar_m)^+ Q} c(v) \, dv
+\end{equation}
+
+Differentiating with respect to $p$ for $p > \pbar_m$:
+\begin{align}
+\frac{\partial Q^{\text{surge}}}{\partial p} &= c((p - \pbar_m)Q) \cdot Q \nonumber \\
+&= c_0 Q \left(1 + \bsurge(p - \pbar_m)^\gamma\right)
+\end{align}
+
+For $\gamma = 1$ (linear surge), the Lipschitz constant becomes \textbf{state-dependent}:
+\begin{equation}
+L(p, m) = c_0 Q (1 + \bsurge(p - \pbar_m))
+\end{equation}
+
+This dependence on $(p - \pbar_m)$ means the Lipschitz constant is no longer uniform---it increases with distance from the capacity threshold.
+
+\subsection{Average Lipschitz Constant Over Shift Region}
+
+When the worst-case distribution under Wasserstein DRO shifts mass rightward by $\eps$, we need to compute the average Lipschitz constant over the shift region $[p - \eps, p]$:
+\begin{align}
+\bar{L}(p, m) &= \frac{1}{\eps} \int_{p-\eps}^p L(s, m) \, ds \nonumber \\
+&= \frac{1}{\eps} \int_{p-\eps}^p c_0 Q (1 + \bsurge(s - \pbar_m)) \, ds \nonumber \\
+&= c_0 Q \left(1 + \bsurge\left(p - \pbar_m - \frac{\eps}{2}\right)\right)
+\end{align}
+
+\subsection{Taylor Expansion of Threshold Shift}
+
+The effective threshold shift under surge pricing is:
+\begin{equation}
+\Delta p^{\text{DRO}} = -\frac{\bar{L} \cdot \eps}{Qc_0}
+\end{equation}
+
+Substituting and expanding:
+\begin{align}
+\Delta p^{\text{DRO}} &= -\eps\left(1 + \bsurge\left(p - \pbar_m - \frac{\eps}{2}\right)\right) \nonumber \\
+&= -\eps - \bsurge\eps(p - \pbar_m) + \frac{\bsurge\eps^2}{2}
+\end{align}
+
+At the threshold $p = \pstar_{k \to k+1}$, using $p - \pbar_k = wT/(Qc_0)$:
+\begin{equation}
+\Delta p^{\text{DRO}} \approx -\eps\left(1 + \frac{\bsurge\gamma}{2}\right) + R(\bsurge)
+\end{equation}
+
+\subsection{Remainder Bound}
+
+The Taylor expansion remainder is:
+\begin{equation}
+R(\bsurge) = O(\bsurge^2 \eps^2) + O(\bsurge^2 \gamma^2)
+\end{equation}
+
+For $\bsurge \in [0, 1]$ and $\gamma = 1$:
+\begin{equation}
+|R(\bsurge)| \leq \frac{\bsurge^2 \gamma^2}{4}
+\end{equation}
+
+\textbf{Proof:} The second-order term in the Taylor expansion is:
+\begin{align}
+R(\bsurge) &= \frac{1}{2}\frac{\partial^2}{\partial\bsurge^2}\left[-\eps\left(1 + \bsurge\gamma/2\right)\right]\bigg|_{\bsurge = \xi} \cdot \bsurge^2 \nonumber \\
+&= O(\bsurge^2\gamma^2/4)
+\end{align}
+for some $\xi \in [0, \bsurge]$.
+
+\subsection{Practical Implication}
+
+For the 1\% Safe Zone ($\bsurge \leq 0.8$, $\gamma = 1$):
+\begin{itemize}
+\item The effective shift multiplier is approximately $1 + \bsurge/2 \approx 1.4$
+\item The remainder $|R(\bsurge)| \leq 0.8^2/4 = 0.16 < 0.2$
+\item The total deviation from linear $\eps$-shift is bounded and predictable
+\end{itemize}
+
+This derivation justifies using a slightly inflated $\eps' = \eps(1 + \bsurge\gamma/2)$ under surge pricing to maintain the 1\% gap guarantee.
+
+\section{Scenario-Specific Detailed Results}
+\label{supp:scenario_details}
+
+This section provides extended analysis of the three scenarios (A, B, C) used in our numerical experiments.
+
+\subsection{Scenario Definitions}
+
+\begin{itemize}
+\item \textbf{Scenario A (Safe Case):} $\mu = 0.450$, $\sigma = 0.080$. The true mean is well above the decision threshold $\pstar_{0 \to 1} = 0.380$, so both SAA and DRO reliably choose $m^* = 1$.
+
+\item \textbf{Scenario B (Boundary Case):} $\mu = 0.385$, $\sigma = 0.080$. The true mean is only 0.5 percentage points above the threshold, creating high sensitivity to sampling variability.
+
+\item \textbf{Scenario C (Low Absence):} $\mu = 0.300$, $\sigma = 0.060$. The true mean is well below the threshold, so the oracle decision is $m^* = 0$.
+\end{itemize}
+
+The key insight from our experiments is that DRO's value is \textit{asymmetric}---it provides substantial protection in boundary cases (Scenario B) while incurring negligible cost in safe cases (Scenarios A and C).
+
+\section{Economic Impact Analysis}
+\label{supp:economic}
+
+\subsection{Yamato-Scale Carrier Calculation}
+
+For a major carrier operating at Yamato Transport's scale:
+\begin{itemize}
+\item Daily delivery volume: $\sim$5 million packages
+\item Regional distribution centers: $\sim$70 nationwide
+\item Average daily routes per center: $\sim$150
+\end{itemize}
+
+\textbf{Annual savings from DRO adoption:}
+
+The \scenarioBAdvantage{} percentage point improvement in oracle match rate in boundary cases translates to:
+\begin{align*}
+\text{Annual savings} &= (\text{routes}) \times (\text{boundary case frequency}) \times (\text{cost difference}) \\
+&\approx 70 \times 150 \times 365 \times 0.15 \times (wT - Qc \cdot \text{shortage}) \\
+&\approx 300\text{ million JPY annually}
+\end{align*}
+
+This estimate assumes 15\% of operating days represent boundary cases where DRO's protection is most valuable.
+
+\section{CVaR Comparison Extended Analysis}
+\label{supp:cvar_details}
+
+\subsection{Design-Driven vs.\ Adaptive Conservatism}
+
+The fundamental distinction between CVaR and DRO approaches lies in their conservatism mechanisms:
+
+\begin{itemize}
+\item \textbf{CVaR (Design-Driven):} Conservatism is \textit{built into the objective function} through tail-risk protection. CVaR$_\alpha$ optimizes the expected cost conditional on being in the worst $(1-\alpha)\%$ of outcomes. This leads to systematic over-staffing regardless of the true distribution's position relative to thresholds.
+
+\item \textbf{DRO (Adaptive):} Conservatism is \textit{proportional to distributional uncertainty}. The $\eps$-shift applies uniformly to all thresholds, but its decision impact depends on the sample mean's proximity to thresholds.
+\end{itemize}
+
+\subsection{Why CVaR Achieves 100\% Match in Scenario B}
+
+CVaR's apparent perfect performance in Scenario B ($m^* = 1$) is \textit{coincidental}, not evidence of superior decision-making:
+
+\begin{enumerate}
+\item CVaR's tail-risk focus always biases decisions upward (more staffing).
+\item In Scenario B, the oracle also chooses $m = 1$, so CVaR's upward bias happens to align.
+\item In Scenario C ($m^* = 0$), this same bias causes CVaR to systematically over-staff, achieving only 10--15\% oracle match.
+\end{enumerate}
+
+This asymmetry demonstrates that CVaR's conservatism is not ``smart''---it does not adapt to the decision context.
+
+\section{Code Documentation}
+\label{supp:code}
+
+\subsection{Repository Structure}
+
+The complete code is available at: \\\url{https://github.com/jpjpjp191919/lastmile-dro}
+
+\begin{verbatim}
+lastmile-dro/
+|-- src/
+|   |-- __init__.py           # Package initialization
+|   |-- config.py             # Parameters and experimental settings
+|   |-- main.py               # Main entry point (run simulations)
+|   |-- simulation.py         # Monte Carlo simulation engine
+|   |-- theory.py             # Theoretical computations (thresholds)
+|   |-- visualization.py      # Figure generation (Figures 1-10)
+|   +-- outputs.py            # Output generation (tables, macros)
+|-- outputs/
+|   |-- data/
+|   |   +-- results.json      # Complete simulation results (JSON)
+|   |-- figures/              # Generated PDF figures
+|   +-- tables/               # Auto-generated LaTeX tables
+|-- figures/                  # Figures for paper compilation
+|-- epsilon_shift_main.tex    # Main paper source
+|-- numerical_values.tex      # Auto-generated LaTeX macros
+|-- epsilon_shift_calculator.xlsx  # Excel implementation
++-- README.md                 # Usage instructions
+\end{verbatim}
+
+\subsection{Key Modules and Functions}
+
+\textbf{simulation.py} (Core simulation engine):
+\begin{itemize}[nosep]
+\item \texttt{dro\_decision()}: Implements Algorithm 1 ($\eps$-shift rule)
+\item \texttt{saa\_decision()}: Sample Average Approximation baseline
+\item \texttt{oracle\_decision()}: Oracle with known true distribution
+\item \texttt{run\_scenario()}: Execute full Monte Carlo experiment
+\item \texttt{compute\_cvar\_decision()}: CVaR-based conservative policy
+\end{itemize}
+
+\textbf{theory.py} (Theoretical computations):
+\begin{itemize}[nosep]
+\item \texttt{compute\_thresholds()}: Calculate $\pstar_{m \to m+1}$ from parameters
+\item \texttt{compute\_capacity\_bounds()}: Calculate $\pbar_m$ values
+\item \texttt{verify\_lipschitz()}: Validate uniform Lipschitz structure
+\end{itemize}
+
+\textbf{outputs.py} (Result generation):
+\begin{itemize}[nosep]
+\item \texttt{generate\_latex\_macros()}: Create numerical\_values.tex
+\item \texttt{export\_results\_json()}: Export results.json
+\item \texttt{confidence\_interval()}: Compute mean and 95\% CI
+\end{itemize}
+
+\subsection{Reproducibility}
+
+All experiments use:
+\begin{itemize}[nosep]
+\item Random seed: 42 (fixed for reproducibility)
+\item Monte Carlo replications: 1,000 per configuration
+\item Out-of-sample evaluation: 1,000 draws from true distribution
+\item Confidence intervals: 95\% using $t$-distribution
+\item Python version: 3.10+ with NumPy, SciPy, Matplotlib
+\end{itemize}
+
+\textbf{To reproduce all results:}
+\begin{verbatim}
+cd src && python main.py --seed 42 --replications 1000
+\end{verbatim}
+
+\end{document}

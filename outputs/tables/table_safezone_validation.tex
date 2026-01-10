@@ -1,0 +1,16 @@
+% TABLE: Safe Zone Validation - Auto-generated from results.json
+\begin{table}[htbp]
+\centering
+\caption{1\% Safe Zone Rule Validation (surge correction: $\varepsilon_{\text{eff}} = \varepsilon \times (1 + \beta/2)$)}
+\label{tab:safezone_validation}
+\begin{tabular}{lcccc}
+\toprule
+$\varepsilon$ & Max Gap ($\beta \leq 0.8$) & 1\% Threshold & Safe Zone? & Recommendation \\
+\midrule
+0.01 & 4.38\% & 1.00\% & No & --- \\
+0.02 & 1.39\% & 1.00\% & No & --- \\
+0.03 & 0.49\% & 1.00\% & \textbf{Yes} & $\star$ Recommended \\
+0.05 & 0.04\% & 1.00\% & \textbf{Yes} & $\star$ Recommended \\
+\bottomrule
+\end{tabular}
+\end{table}
